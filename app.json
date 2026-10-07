@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "Radical Engineering",
+    "slug": "radical-engineering-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1c1917"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.radicalengineering.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1c1917"
+      },
+      "package": "com.radicalengineering.mobile"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "scheme": "radicalengineering",
+    "extra": {
+      "apiBaseUrl": "https://admin.atiar.com.bd",
+      "hotline1": "+880 1760195100",
+      "hotline2": "+880 1787224460",
+      "email": "radicalengineeringbd@gmail.com",
+      "address": "1400, Hazi Hasen Ali Market, Station Road, Kishoreganj, Bangladesh"
+    }
+  }
+}
+

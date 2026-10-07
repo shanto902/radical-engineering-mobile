@@ -14,44 +14,74 @@ interface ProductCardProps {
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, horizontal = false }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { addToCart, toggleWishlist, isWishlisted } = useCart();
   const wishlisted = isWishlisted(product.id);
 
   if (horizontal) {
     return (
       <TouchableOpacity
-        activeOpacity={0.85}
+        activeOpacity={0.88}
         onPress={onPress}
         style={[
           styles.horizontalCard,
-          { backgroundColor: colors.surface, borderColor: colors.border },
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            shadowColor: colors.cardShadow,
+          },
         ]}
       >
-        <Image source={{ uri: product.image }} style={styles.horizontalImage} resizeMode="cover" />
+        <View style={styles.horizontalImageWrapper}>
+          <Image
+            source={{ uri: product.image }}
+            style={styles.horizontalImage}
+            resizeMode="cover"
+          />
+          {product.wattage && (
+            <View style={styles.horizontalWattTag}>
+              <Text style={styles.horizontalWattText}>{product.wattage}</Text>
+            </View>
+          )}
+        </View>
+
         <View style={styles.horizontalDetails}>
-          <View style={styles.badgeRow}>
-            {product.wattage ? (
-              <View style={styles.wattageBadge}>
-                <Text style={styles.wattageText}>{product.wattage}</Text>
+          <View style={styles.cardHeaderRow}>
+            <Text style={[styles.brandBadge, { color: COLORS.primary }]} numberOfLines={1}>
+              {product.brand}
+            </Text>
+            {product.subCategory && (
+              <View style={[styles.subCatPill, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]}>
+                <Text style={[styles.subCatText, { color: colors.textSecondary }]} numberOfLines={1}>
+                  {product.subCategory}
+                </Text>
               </View>
-            ) : null}
-            <Text style={[styles.brandText, { color: colors.textSecondary }]}>{product.brand}</Text>
+            )}
           </View>
 
-          <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>
+          <Text style={[styles.titleText, { color: colors.text }]} numberOfLines={2}>
             {product.title}
           </Text>
 
-          <View style={styles.priceRow}>
-            <Text style={styles.price}>
-              {APP_CONFIG.currency} {product.price.toLocaleString()}
-            </Text>
-            {product.originalPrice && (
-              <Text style={[styles.originalPrice, { color: colors.textMuted }]}>
-                {APP_CONFIG.currency} {product.originalPrice.toLocaleString()}
+          <View style={styles.priceAndActionRow}>
+            <View>
+              <Text style={styles.priceMain}>
+                {APP_CONFIG.currency} {product.price.toLocaleString()}
               </Text>
-            )}
+              {product.originalPrice && (
+                <Text style={[styles.strikePrice, { color: colors.textMuted }]}>
+                  {APP_CONFIG.currency} {product.originalPrice.toLocaleString()}
+                </Text>
+              )}
+            </View>
+
+            <TouchableOpacity
+              onPress={() => addToCart(product)}
+              style={styles.addCartBtnSmall}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="cart-outline" size={16} color="#FFFFFF" />
+            </TouchableOpacity>
           </View>
         </View>
       </TouchableOpacity>
@@ -63,53 +93,90 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, hori
       activeOpacity={0.9}
       onPress={onPress}
       style={[
-        styles.card,
-        { backgroundColor: colors.surface, borderColor: colors.border },
+        styles.gridCard,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          shadowColor: colors.cardShadow,
+        },
       ]}
     >
+      {/* Image Container with Badges */}
       <View style={styles.imageContainer}>
-        <Image source={{ uri: product.image }} style={styles.image} resizeMode="cover" />
+        <Image
+          source={{ uri: product.image }}
+          style={styles.productImage}
+          resizeMode="cover"
+        />
+
+        {/* Floating Wishlist Button */}
         <TouchableOpacity
           onPress={() => toggleWishlist(product.id)}
-          style={[styles.wishlistBtn, { backgroundColor: colors.surface }]}
+          style={[styles.floatingWishlist, { backgroundColor: colors.surface }]}
+          activeOpacity={0.8}
         >
           <Ionicons
             name={wishlisted ? 'heart' : 'heart-outline'}
-            size={18}
+            size={16}
             color={wishlisted ? COLORS.danger : colors.textSecondary}
           />
         </TouchableOpacity>
+
+        {/* Capacity / Wattage Tag */}
         {product.wattage ? (
-          <View style={styles.badgeOverlay}>
-            <Text style={styles.badgeOverlayText}>{product.wattage}</Text>
+          <View style={styles.floatingWattBadge}>
+            <Ionicons name="flash" size={10} color="#FFFFFF" />
+            <Text style={styles.floatingWattText}>{product.wattage}</Text>
+          </View>
+        ) : null}
+
+        {/* Discount Badge */}
+        {product.discountPercent ? (
+          <View style={styles.discountBadge}>
+            <Text style={styles.discountText}>-{product.discountPercent}%</Text>
           </View>
         ) : null}
       </View>
 
-      <View style={styles.infoContainer}>
-        <Text style={[styles.brand, { color: colors.textSecondary }]}>{product.brand}</Text>
+      {/* Product Content Body */}
+      <View style={styles.contentBody}>
+        {/* Brand & Stock Status */}
+        <View style={styles.metaRow}>
+          <Text style={[styles.brandText, { color: COLORS.primary }]} numberOfLines={1}>
+            {product.brand}
+          </Text>
+          <View style={styles.stockIndicator}>
+            <View style={[styles.stockDot, { backgroundColor: product.inStock ? COLORS.success : COLORS.warning }]} />
+            <Text style={[styles.stockStatusText, { color: colors.textSecondary }]}>
+              {product.inStock ? 'In Stock' : 'Order'}
+            </Text>
+          </View>
+        </View>
+
+        {/* Product Title */}
         <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>
           {product.title}
         </Text>
 
-        <View style={styles.ratingRow}>
-          <Ionicons name="star" size={13} color="#F59E0B" />
-          <Text style={[styles.ratingText, { color: colors.text }]}>{product.rating}</Text>
-          <Text style={[styles.reviewsText, { color: colors.textMuted }]}>
-            ({product.reviewsCount})
+        {/* Sub-category / Warranty tag */}
+        <View style={styles.subTagRow}>
+          <Ionicons name="shield-checkmark-outline" size={11} color={COLORS.success} />
+          <Text style={[styles.subTagText, { color: colors.textSecondary }]} numberOfLines={1}>
+            {product.warranty}
           </Text>
         </View>
 
+        {/* Price & Add to Cart Footer */}
         <View style={styles.footerRow}>
-          <View>
+          <View style={styles.priceColumn}>
             <Text style={styles.price}>
               {APP_CONFIG.currency} {product.price.toLocaleString()}
             </Text>
-            {product.originalPrice && (
+            {product.originalPrice ? (
               <Text style={[styles.originalPrice, { color: colors.textMuted }]}>
                 {APP_CONFIG.currency} {product.originalPrice.toLocaleString()}
               </Text>
-            )}
+            ) : null}
           </View>
 
           <TouchableOpacity
@@ -117,7 +184,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, hori
             style={styles.addCartBtn}
             activeOpacity={0.8}
           >
-            <Ionicons name="cart-outline" size={16} color="#FFFFFF" />
+            <Ionicons name="cart" size={16} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       </View>
@@ -126,24 +193,29 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, hori
 };
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: RADIUS.md,
+  gridCard: {
+    width: '48%',
+    borderRadius: RADIUS.lg,
     borderWidth: 1,
     overflow: 'hidden',
-    width: '48%',
     marginBottom: SPACING.md,
+    elevation: 3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
   },
   imageContainer: {
     width: '100%',
-    height: 130,
+    height: 140,
     backgroundColor: '#F1F5F9',
     position: 'relative',
+    overflow: 'hidden',
   },
-  image: {
+  productImage: {
     width: '100%',
     height: '100%',
   },
-  wishlistBtn: {
+  floatingWishlist: {
     position: 'absolute',
     top: 8,
     right: 8,
@@ -155,68 +227,202 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.15,
-    shadowRadius: 2,
+    shadowRadius: 3,
     elevation: 2,
   },
-  badgeOverlay: {
+  floatingWattBadge: {
     position: 'absolute',
     bottom: 6,
     left: 6,
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.82)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: RADIUS.sm,
+    gap: 3,
+  },
+  floatingWattText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  discountBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: COLORS.danger,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: RADIUS.sm,
   },
-  badgeOverlayText: {
+  discountText: {
     color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  contentBody: {
+    padding: SPACING.sm + 4,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  brandText: {
     fontSize: 10,
-    fontWeight: '700',
-  },
-  infoContainer: {
-    padding: SPACING.sm + 2,
-  },
-  brand: {
-    fontSize: 11,
-    fontWeight: '600',
-    marginBottom: 2,
+    fontWeight: '800',
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    flex: 1,
+  },
+  stockIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  stockDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  stockStatusText: {
+    fontSize: 9,
+    fontWeight: '600',
   },
   title: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
     lineHeight: 18,
     height: 36,
+    marginBottom: 4,
   },
-  ratingRow: {
+  subTagRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
-    gap: 3,
+    gap: 4,
+    marginBottom: 8,
   },
-  ratingText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  reviewsText: {
+  subTagText: {
     fontSize: 10,
+    flex: 1,
   },
   footerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 8,
-    paddingTop: 4,
+    alignItems: 'flex-end',
+    borderTopWidth: 0.5,
+    borderTopColor: '#F1F5F9',
+    paddingTop: 6,
+  },
+  priceColumn: {
+    flex: 1,
   },
   price: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '800',
     color: COLORS.primary,
   },
   originalPrice: {
+    fontSize: 10,
+    textDecorationLine: 'line-through',
+    marginTop: 1,
+  },
+  addCartBtn: {
+    backgroundColor: COLORS.primary,
+    width: 34,
+    height: 34,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  // Horizontal Styles
+  horizontalCard: {
+    flexDirection: 'row',
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    overflow: 'hidden',
+    padding: SPACING.sm,
+    marginBottom: SPACING.sm + 2,
+    alignItems: 'center',
+  },
+  horizontalImageWrapper: {
+    width: 90,
+    height: 90,
+    borderRadius: RADIUS.md,
+    backgroundColor: '#F1F5F9',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  horizontalImage: {
+    width: '100%',
+    height: '100%',
+  },
+  horizontalWattTag: {
+    position: 'absolute',
+    bottom: 4,
+    left: 4,
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  horizontalWattText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  horizontalDetails: {
+    flex: 1,
+    marginLeft: SPACING.sm + 4,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  brandBadge: {
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  subCatPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  subCatText: {
+    fontSize: 9,
+    fontWeight: '600',
+  },
+  titleText: {
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+    marginBottom: 6,
+  },
+  priceAndActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  priceMain: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  strikePrice: {
     fontSize: 11,
     textDecorationLine: 'line-through',
   },
-  addCartBtn: {
+  addCartBtnSmall: {
     backgroundColor: COLORS.primary,
     width: 32,
     height: 32,
@@ -224,51 +430,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Horizontal layout
-  horizontalCard: {
-    flexDirection: 'row',
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    overflow: 'hidden',
-    padding: SPACING.sm,
-    marginBottom: SPACING.sm,
-    alignItems: 'center',
-  },
-  horizontalImage: {
-    width: 80,
-    height: 80,
-    borderRadius: RADIUS.sm,
-    backgroundColor: '#F1F5F9',
-  },
-  horizontalDetails: {
-    flex: 1,
-    marginLeft: SPACING.sm,
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 2,
-  },
-  wattageBadge: {
-    backgroundColor: COLORS.primaryLight,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
-  wattageText: {
-    fontSize: 10,
-    color: COLORS.primary,
-    fontWeight: '700',
-  },
-  brandText: {
-    fontSize: 11,
-  },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 4,
-  },
 });
-

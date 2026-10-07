@@ -17,6 +17,11 @@ export interface Product {
   voltage?: string;
   warranty: string;
   description: string;
+  shortDescription?: string;
+  subCategory?: string;
+  sku?: string;
+  tags?: string[];
+  discountPercent?: number;
   features: string[];
   specs: Record<string, string>;
   isFeatured?: boolean;

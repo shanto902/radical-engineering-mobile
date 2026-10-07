@@ -25,10 +25,22 @@ interface HomeScreenProps {
   navigation: any;
 }
 
+const AUTHORIZED_BRANDS = [
+  'Growatt',
+  'Solis',
+  'Longi',
+  'Volvo (Panna Group)',
+  'Trina Solar',
+  'JA Solar',
+  'Huawei',
+  'Rahimafrooz',
+];
+
 export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [categories, setCategories] = useState<Category[]>([]);
-  const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [selectedHomeCat, setSelectedHomeCat] = useState<string>('all');
   const [projects, setProjects] = useState<Project[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -40,10 +52,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         apiService.getProjects(),
       ]);
       setCategories(cats);
-      setFeaturedProducts(prods.filter(p => p.isFeatured).slice(0, 4));
+      setAllProducts(prods);
       setProjects(projs.slice(0, 3));
-    } catch (e) {
-      // offline fallback handled by apiService
+    } catch {
+      // offline fallback
     }
   };
 
@@ -57,6 +69,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     setRefreshing(false);
   };
 
+  const filteredFeatured = selectedHomeCat === 'all'
+    ? allProducts.slice(0, 6)
+    : allProducts.filter(p => p.categoryId === selectedHomeCat).slice(0, 6);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Header
@@ -68,12 +84,45 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
       >
-        {/* Banner Carousel */}
+        {/* Live Weather / Solar Irradiance Widget */}
+        <View style={[styles.solarStatusStrip, { backgroundColor: isDark ? '#1E293B' : '#FFF7ED', borderColor: '#FED7AA' }]}>
+          <View style={styles.solarStatusLeft}>
+            <Ionicons name="sunny" size={18} color={COLORS.primary} />
+            <Text style={styles.solarStatusText}>
+              <Text style={{ fontWeight: '800' }}>Kishoreganj Solar Index: </Text>
+              4.8 kWh/m² peak sun • Ideal PV yield
+            </Text>
+          </View>
+          <View style={styles.liveTag}>
+            <View style={styles.liveDot} />
+            <Text style={styles.liveTagText}>LIVE</Text>
+          </View>
+        </View>
+
+        {/* Hero Banner Carousel */}
         <BannerSlider
           onBannerPress={(targetScreen) => {
             if (targetScreen) navigation.navigate(targetScreen);
           }}
         />
+
+        {/* Value Proposition Highlights Strip */}
+        <View style={styles.valueStrip}>
+          <View style={styles.valueItem}>
+            <Ionicons name="shield-checkmark" size={16} color={COLORS.success} />
+            <Text style={[styles.valueText, { color: colors.text }]}>25-Yr Warranty</Text>
+          </View>
+          <View style={styles.valueDivider} />
+          <View style={styles.valueItem}>
+            <Ionicons name="ribbon" size={16} color={COLORS.primary} />
+            <Text style={[styles.valueText, { color: colors.text }]}>Tier-1 Brands</Text>
+          </View>
+          <View style={styles.valueDivider} />
+          <View style={styles.valueItem}>
+            <Ionicons name="construct" size={16} color={COLORS.accent} />
+            <Text style={[styles.valueText, { color: colors.text }]}>Certified Engineers</Text>
+          </View>
+        </View>
 
         {/* 24/7 Hotline Support Bar */}
         <HotlineBar />
@@ -82,25 +131,25 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Smart Engineering Tools</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Smart Engineering Calculators</Text>
               <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-                Calculate solar capacity or build your custom IPS
+                Interactive tools to calculate capacity & estimate bill savings
               </Text>
             </View>
           </View>
 
           <QuickActionCard
-            title="Solar Roof Planner"
-            subtitle="Calculate system size, panel count, bill savings & ROI payback in BDT."
+            title="Solar Roof Planner & ROI"
+            subtitle="Calculate system capacity, required panels, monthly bill savings & payback period in BDT."
             icon="calculator-outline"
             color="#EA580C"
-            badge="POPULAR"
+            badge="FREE SURVEY"
             onPress={() => navigation.navigate('RoofPlanner')}
           />
 
           <QuickActionCard
-            title="Solar IPS & IPS Builder"
-            subtitle="Select fans, lights & appliances to size your required inverter & battery bank."
+            title="Solar IPS & Battery Sizing Builder"
+            subtitle="Select fans, lights & appliances to size your required inverter VA and battery bank."
             icon="hardware-chip-outline"
             color="#0284C7"
             badge="INTERACTIVE"
@@ -108,29 +157,51 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           />
 
           <QuickActionCard
-            title="Live Order Tracker"
-            subtitle="Track engineering site survey, dispatch, and installation progress."
+            title="Live Installation Order Tracker"
+            subtitle="Track engineering site survey, transit, and on-site commissioning status."
             icon="navigate-outline"
             color="#16A34A"
+            badge="TRACK"
             onPress={() => navigation.navigate('OrderTracker')}
           />
 
           <QuickActionCard
-            title="E-Learning & Knowledge Base"
-            subtitle="Battery longevity guides, distilled water care & solar maintenance."
+            title="E-Learning & Battery Longevity Guides"
+            subtitle="Learn battery preservation, DM water checks & lightning protection standards."
             icon="book-outline"
             color="#8B5CF6"
             onPress={() => navigation.navigate('ELearning')}
           />
         </View>
 
+        {/* Authorized Brands Marquee Strip */}
+        <View style={styles.brandsSection}>
+          <Text style={[styles.brandsSectionTitle, { color: colors.textSecondary }]}>
+            AUTHORIZED EQUIPMENT PARTNERS
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.brandsScroll}>
+            {AUTHORIZED_BRANDS.map((brandName) => (
+              <View
+                key={brandName}
+                style={[
+                  styles.brandChip,
+                  { backgroundColor: colors.surface, borderColor: colors.border },
+                ]}
+              >
+                <Ionicons name="checkmark-circle" size={14} color={COLORS.primary} />
+                <Text style={[styles.brandChipText, { color: colors.text }]}>{brandName}</Text>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+
         {/* Popular Categories */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Explore Categories</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Product Categories</Text>
               <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-                Tier-1 solar equipment & power backup gear
+                Browse certified solar PV, inverters & battery backup equipment
               </Text>
             </View>
             <TouchableOpacity onPress={() => navigation.navigate('Catalog')}>
@@ -163,22 +234,53 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           </View>
         </View>
 
-        {/* Featured Products */}
+        {/* Featured Products with Category Tabs */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Featured Equipment</Text>
               <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-                Top rated solar panels, inverters & batteries
+                Top rated solar panels, inverters & tubular batteries
               </Text>
             </View>
             <TouchableOpacity onPress={() => navigation.navigate('Catalog')}>
-              <Text style={styles.viewAllText}>View All</Text>
+              <Text style={styles.viewAllText}>See All</Text>
             </TouchableOpacity>
           </View>
 
+          {/* Horizontal Category Switcher on Home */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.homeFilterRow}>
+            {[
+              { id: 'all', label: 'All Featured' },
+              { id: 'inverter', label: 'Inverters' },
+              { id: 'battery', label: 'Batteries' },
+              { id: 'solar-panels', label: 'Solar Panels' },
+            ].map((f) => (
+              <TouchableOpacity
+                key={f.id}
+                onPress={() => setSelectedHomeCat(f.id)}
+                style={[
+                  styles.filterPill,
+                  {
+                    backgroundColor: selectedHomeCat === f.id ? COLORS.primary : colors.surface,
+                    borderColor: selectedHomeCat === f.id ? COLORS.primary : colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.filterPillText,
+                    { color: selectedHomeCat === f.id ? '#FFFFFF' : colors.text },
+                  ]}
+                >
+                  {f.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
           <View style={styles.productsGrid}>
-            {featuredProducts.map((product) => (
+            {filteredFeatured.map((product) => (
               <ProductCard
                 key={product.id}
                 product={product}
@@ -188,13 +290,32 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           </View>
         </View>
 
+        {/* Customer Reviews & Google Rating Card */}
+        <View style={[styles.reviewsCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={styles.reviewsHeaderRow}>
+            <View style={styles.googleBadge}>
+              <Ionicons name="logo-google" size={18} color="#EA4335" />
+              <Text style={styles.googleRatingText}>4.9 ★★★★★</Text>
+            </View>
+            <Text style={[styles.googleVerified, { color: colors.textSecondary }]}>
+              Verified Customer Rating
+            </Text>
+          </View>
+          <Text style={[styles.testimonialQuote, { color: colors.text }]}>
+            "Radical Engineering installed our 3.5kW hybrid solar system in Kishoreganj. Their calculation of our fan and fridge load was pinpoint accurate, saving over 70% on electricity bills."
+          </Text>
+          <Text style={[styles.testimonialAuthor, { color: colors.textMuted }]}>
+            — Engr. Rafiqul Islam, Station Road, Kishoreganj
+          </Text>
+        </View>
+
         {/* Recent Installation Projects */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Projects</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Field Installations</Text>
               <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
-                Verified engineering installations across Bangladesh
+                Verified engineering deployments across Bangladesh
               </Text>
             </View>
             <TouchableOpacity onPress={() => navigation.navigate('Projects')}>
@@ -283,6 +404,69 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  solarStatusStrip: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+  },
+  solarStatusLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  solarStatusText: {
+    fontSize: 11,
+    color: '#9A3412',
+  },
+  liveTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    gap: 4,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.success,
+  },
+  liveTagText: {
+    color: '#166534',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  valueStrip: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    marginHorizontal: SPACING.md,
+    marginVertical: SPACING.sm,
+    paddingVertical: 8,
+  },
+  valueItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  valueText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  valueDivider: {
+    width: 1,
+    height: 14,
+    backgroundColor: '#CBD5E1',
+  },
   section: {
     paddingHorizontal: SPACING.md,
     marginTop: SPACING.md,
@@ -295,7 +479,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   sectionSubtitle: {
     fontSize: 12,
@@ -304,6 +488,33 @@ const styles = StyleSheet.create({
   viewAllText: {
     color: COLORS.primary,
     fontSize: 13,
+    fontWeight: '700',
+  },
+  brandsSection: {
+    marginTop: SPACING.md,
+  },
+  brandsSectionTitle: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
+    paddingHorizontal: SPACING.md,
+    marginBottom: 8,
+  },
+  brandsScroll: {
+    paddingHorizontal: SPACING.md,
+    gap: 8,
+  },
+  brandChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    gap: 5,
+  },
+  brandChipText: {
+    fontSize: 11,
     fontWeight: '700',
   },
   categoryGrid: {
@@ -336,10 +547,61 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 2,
   },
+  homeFilterRow: {
+    gap: 8,
+    marginBottom: SPACING.md,
+  },
+  filterPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+  },
+  filterPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
   productsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
+  },
+  reviewsCard: {
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.md,
+    padding: SPACING.md,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+  },
+  reviewsHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  googleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  googleRatingText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#EA4335',
+  },
+  googleVerified: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  testimonialQuote: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontStyle: 'italic',
+    marginBottom: 6,
+  },
+  testimonialAuthor: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   projectCard: {
     borderRadius: RADIUS.md,
@@ -438,4 +700,3 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
-

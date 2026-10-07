@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -23,12 +23,16 @@ interface CatalogScreenProps {
   route: any;
 }
 
+type SortOption = 'default' | 'price_asc' | 'price_desc';
+
 export const CatalogScreen: React.FC<CatalogScreenProps> = ({ navigation, route }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const initialCat = route.params?.categoryId || 'all';
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCat);
+  const [selectedBrand, setSelectedBrand] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<SortOption>('default');
   const [searchQuery, setSearchQuery] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,8 +58,33 @@ export const CatalogScreen: React.FC<CatalogScreenProps> = ({ navigation, route 
     setLoading(false);
   };
 
+  // Distinct brands available in current products
+  const availableBrands = useMemo(() => {
+    const brandsSet = new Set<string>();
+    products.forEach(p => {
+      if (p.brand && p.brand !== 'Radical Engineering') {
+        brandsSet.add(p.brand);
+      }
+    });
+    return ['all', ...Array.from(brandsSet)];
+  }, [products]);
+
+  // Filter and sort products
+  const displayedProducts = useMemo(() => {
+    let list = [...products];
+    if (selectedBrand !== 'all') {
+      list = list.filter(p => p.brand.toLowerCase() === selectedBrand.toLowerCase());
+    }
+    if (sortBy === 'price_asc') {
+      list.sort((a, b) => a.price - b.price);
+    } else if (sortBy === 'price_desc') {
+      list.sort((a, b) => b.price - a.price);
+    }
+    return list;
+  }, [products, selectedBrand, sortBy]);
+
   const allCategoriesList = [
-    { id: 'all', name: 'All Products', icon: 'grid-outline' },
+    { id: 'all', name: 'All Equipment', icon: 'grid-outline' },
     ...categories,
   ];
 
@@ -99,37 +128,90 @@ export const CatalogScreen: React.FC<CatalogScreenProps> = ({ navigation, route 
               key={cat.id}
               category={cat}
               isSelected={selectedCategory === cat.id}
-              onSelect={() => setSelectedCategory(cat.id)}
+              onSelect={() => {
+                setSelectedCategory(cat.id);
+                setSelectedBrand('all');
+              }}
             />
           ))}
         </ScrollView>
       </View>
 
-      {/* Product Results Header */}
+      {/* Secondary Filter: Brands Strip */}
+      {availableBrands.length > 2 && (
+        <View style={styles.brandsWrapper}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.brandsContent}
+          >
+            {availableBrands.map((b) => (
+              <TouchableOpacity
+                key={b}
+                onPress={() => setSelectedBrand(b)}
+                style={[
+                  styles.brandPill,
+                  {
+                    backgroundColor: selectedBrand === b ? (isDark ? '#334155' : '#0F172A') : colors.surface,
+                    borderColor: selectedBrand === b ? (isDark ? '#334155' : '#0F172A') : colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.brandPillText,
+                    { color: selectedBrand === b ? '#FFFFFF' : colors.textSecondary },
+                  ]}
+                >
+                  {b === 'all' ? 'All Brands' : b}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Sort & Results Count Bar */}
       <View style={styles.resultsHeader}>
         <Text style={[styles.resultsCount, { color: colors.textSecondary }]}>
-          Showing {products.length} products
+          Showing {displayedProducts.length} items
         </Text>
+
+        {/* Sort Controls */}
+        <View style={styles.sortRow}>
+          <TouchableOpacity
+            onPress={() =>
+              setSortBy(prev => (prev === 'default' ? 'price_asc' : prev === 'price_asc' ? 'price_desc' : 'default'))
+            }
+            style={[styles.sortBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          >
+            <Ionicons name="swap-vertical" size={13} color={COLORS.primary} />
+            <Text style={[styles.sortBtnText, { color: colors.text }]}>
+              {sortBy === 'default' ? 'Featured' : sortBy === 'price_asc' ? 'Price: Low' : 'Price: High'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading ? (
         <View style={styles.centerBox}>
           <ActivityIndicator size="large" color={COLORS.primary} />
           <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-            Loading equipment...
+            Loading Directus equipment catalog...
           </Text>
         </View>
-      ) : products.length === 0 ? (
+      ) : displayedProducts.length === 0 ? (
         <View style={styles.centerBox}>
           <Ionicons name="search" size={48} color={colors.textMuted} />
           <Text style={[styles.emptyTitle, { color: colors.text }]}>No products found</Text>
           <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-            Try clearing your search filters or browse other categories.
+            Try clearing search filters or selecting another equipment category.
           </Text>
           <TouchableOpacity
             style={styles.resetBtn}
             onPress={() => {
               setSelectedCategory('all');
+              setSelectedBrand('all');
               setSearchQuery('');
             }}
           >
@@ -138,7 +220,7 @@ export const CatalogScreen: React.FC<CatalogScreenProps> = ({ navigation, route 
         </View>
       ) : (
         <FlatList
-          data={products}
+          data={displayedProducts}
           keyExtractor={(item) => item.id}
           numColumns={2}
           columnWrapperStyle={styles.rowWrapper}
@@ -169,7 +251,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: SPACING.md,
-    height: 42,
+    height: 44,
     borderRadius: RADIUS.full,
     gap: 8,
   },
@@ -179,18 +261,55 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   categoriesWrapper: {
-    paddingVertical: SPACING.sm + 2,
+    paddingVertical: SPACING.sm,
   },
   categoriesContent: {
     paddingHorizontal: SPACING.md,
   },
-  resultsHeader: {
+  brandsWrapper: {
+    paddingBottom: SPACING.xs + 2,
+  },
+  brandsContent: {
     paddingHorizontal: SPACING.md,
-    paddingBottom: SPACING.xs,
+    gap: 6,
+  },
+  brandPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+  },
+  brandPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  resultsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs + 2,
   },
   resultsCount: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
+  },
+  sortRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sortBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    gap: 4,
+  },
+  sortBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   listContent: {
     paddingHorizontal: SPACING.md,
@@ -232,4 +351,3 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 });
-

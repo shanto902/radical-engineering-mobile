@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Linking,
   ActivityIndicator,
+  Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Header } from '../components/Header';
@@ -23,13 +24,16 @@ interface ProductDetailScreenProps {
   route: any;
 }
 
+type DetailTab = 'overview' | 'specs' | 'support';
+
 export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ navigation, route }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { addToCart, toggleWishlist, isWishlisted } = useCart();
   const { productId } = route.params;
 
   const [product, setProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState(1);
+  const [activeTab, setActiveTab] = useState<DetailTab>('overview');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -43,6 +47,9 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
     return (
       <View style={[styles.centerBox, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+          Loading product specifications...
+        </Text>
       </View>
     );
   }
@@ -50,9 +57,10 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
   if (!product) {
     return (
       <View style={[styles.centerBox, { backgroundColor: colors.background }]}>
-        <Text style={[styles.notFoundText, { color: colors.text }]}>Product not found</Text>
+        <Ionicons name="alert-circle-outline" size={48} color={COLORS.danger} />
+        <Text style={[styles.notFoundText, { color: colors.text }]}>Product details unavailable</Text>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.backBtnText}>Go Back</Text>
+          <Text style={styles.backBtnText}>Return to Catalog</Text>
         </TouchableOpacity>
       </View>
     );
@@ -60,11 +68,26 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
 
   const wishlisted = isWishlisted(product.id);
 
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        title: product.title,
+        message: `${product.title} - ${APP_CONFIG.currency} ${product.price.toLocaleString()}\nAvailable at Radical Engineering (${APP_CONFIG.website})`,
+      });
+    } catch {
+      // ignore
+    }
+  };
+
   const handleWhatsAppConsult = () => {
     const message = encodeURIComponent(
-      `Hello Radical Engineering, I am interested in: ${product.title} (${product.model}) priced at ${APP_CONFIG.currency} ${product.price}. Please provide stock and installation details.`
+      `Hello Radical Engineering,\n\nI am interested in:\nProduct: ${product.title}\nBrand: ${product.brand}\nSKU: ${product.sku || product.model}\nPrice: ${APP_CONFIG.currency} ${product.price.toLocaleString()}\n\nPlease confirm availability, warranty, and delivery/installation details to my location.`
     );
     Linking.openURL(`https://wa.me/${APP_CONFIG.whatsappNumber.replace('+', '')}?text=${message}`);
+  };
+
+  const handleCallHotline = () => {
+    Linking.openURL(`tel:${APP_CONFIG.hotline1Raw}`);
   };
 
   const handleAddToCartAndCart = () => {
@@ -78,177 +101,389 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
         showBack
         onBack={() => navigation.goBack()}
         title={product.brand}
+        subtitle={product.categoryName}
         onOpenCart={() => navigation.navigate('Cart')}
       />
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Product Image Stage */}
-        <View style={styles.imageStage}>
-          <Image source={{ uri: product.image }} style={styles.mainImage} resizeMode="cover" />
-          <TouchableOpacity
-            style={[styles.floatingWishlist, { backgroundColor: colors.surface }]}
-            onPress={() => toggleWishlist(product.id)}
-          >
-            <Ionicons
-              name={wishlisted ? 'heart' : 'heart-outline'}
-              size={22}
-              color={wishlisted ? COLORS.danger : colors.textSecondary}
-            />
-          </TouchableOpacity>
-          {product.wattage ? (
-            <View style={styles.wattageTag}>
-              <Text style={styles.wattageTagText}>{product.wattage}</Text>
-            </View>
-          ) : null}
-        </View>
+        {/* Hero Image Stage */}
+        <View style={styles.heroImageContainer}>
+          <Image source={{ uri: product.image }} style={styles.mainHeroImage} resizeMode="contain" />
 
-        <View style={styles.contentBody}>
-          {/* Category & Stock */}
-          <View style={styles.metaRow}>
-            <Text style={[styles.categoryBadge, { color: COLORS.primary }]}>
-              {product.categoryName}
-            </Text>
-            <View style={[styles.stockBadge, { backgroundColor: product.inStock ? '#DCFCE7' : '#FEE2E2' }]}>
-              <Text style={[styles.stockText, { color: product.inStock ? '#166534' : '#991B1B' }]}>
+          {/* Floating Actions on Image */}
+          <View style={styles.floatingTopActions}>
+            <TouchableOpacity
+              style={[styles.floatingActionBtn, { backgroundColor: colors.surface }]}
+              onPress={() => toggleWishlist(product.id)}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name={wishlisted ? 'heart' : 'heart-outline'}
+                size={20}
+                color={wishlisted ? COLORS.danger : colors.textSecondary}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.floatingActionBtn, { backgroundColor: colors.surface }]}
+              onPress={handleShare}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="share-social-outline" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Floating Feature Tags */}
+          <View style={styles.floatingBadgesRow}>
+            {product.wattage ? (
+              <View style={styles.wattagePill}>
+                <Ionicons name="flash" size={13} color="#FFFFFF" />
+                <Text style={styles.wattagePillText}>{product.wattage}</Text>
+              </View>
+            ) : null}
+
+            {product.subCategory ? (
+              <View style={styles.subCatPill}>
+                <Text style={styles.subCatPillText}>{product.subCategory}</Text>
+              </View>
+            ) : null}
+
+            <View
+              style={[
+                styles.stockPill,
+                { backgroundColor: product.inStock ? '#16A34A' : '#D97706' },
+              ]}
+            >
+              <View style={styles.stockDotWhite} />
+              <Text style={styles.stockPillText}>
                 {product.inStock ? 'In Stock' : 'Pre-Order'}
               </Text>
             </View>
           </View>
+        </View>
 
-          {/* Title */}
-          <Text style={[styles.title, { color: colors.text }]}>{product.title}</Text>
+        {/* Product Information Body */}
+        <View style={styles.infoWrapper}>
+          {/* Brand & SKU Header */}
+          <View style={styles.brandRow}>
+            <View style={styles.brandTagWrapper}>
+              <Text style={styles.brandTagText}>{product.brand}</Text>
+            </View>
+            {product.sku ? (
+              <Text style={[styles.skuText, { color: colors.textMuted }]}>
+                SKU: {product.sku}
+              </Text>
+            ) : null}
+          </View>
 
-          {/* Model & Ratings */}
-          <View style={styles.subInfoRow}>
-            <Text style={[styles.modelText, { color: colors.textSecondary }]}>
-              Model: {product.model}
-            </Text>
+          {/* Product Title */}
+          <Text style={[styles.mainTitle, { color: colors.text }]}>{product.title}</Text>
+
+          {/* Rating & Warranty Strip */}
+          <View style={styles.metaStrip}>
             <View style={styles.ratingBadge}>
               <Ionicons name="star" size={14} color="#F59E0B" />
               <Text style={styles.ratingScore}>{product.rating}</Text>
               <Text style={[styles.reviewsCount, { color: colors.textMuted }]}>
-                ({product.reviewsCount} reviews)
+                ({product.reviewsCount} verified reviews)
+              </Text>
+            </View>
+
+            <View style={styles.warrantyStripBadge}>
+              <Ionicons name="shield-checkmark" size={15} color={COLORS.success} />
+              <Text style={[styles.warrantyStripText, { color: colors.text }]}>
+                {product.warranty}
               </Text>
             </View>
           </View>
 
-          {/* Price Box */}
-          <View style={[styles.priceBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <View>
-              <Text style={styles.priceLabel}>Price</Text>
-              <View style={styles.priceRow}>
-                <Text style={styles.priceMain}>
-                  {APP_CONFIG.currency} {product.price.toLocaleString()}
-                </Text>
-                {product.originalPrice && (
-                  <Text style={[styles.originalPrice, { color: colors.textMuted }]}>
+          {/* Premium Price Showcase Card */}
+          <View
+            style={[
+              styles.priceCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                shadowColor: colors.cardShadow,
+              },
+            ]}
+          >
+            <View style={styles.priceRowTop}>
+              <View>
+                <Text style={styles.priceLeadLabel}>Special Price</Text>
+                <View style={styles.priceNumbersRow}>
+                  <Text style={styles.currencySymbol}>{APP_CONFIG.currency}</Text>
+                  <Text style={styles.priceAmount}>
+                    {product.price.toLocaleString()}
+                  </Text>
+                </View>
+              </View>
+
+              {product.originalPrice && product.originalPrice > product.price ? (
+                <View style={styles.savingsBox}>
+                  <Text style={[styles.strikeThroughPrice, { color: colors.textMuted }]}>
                     {APP_CONFIG.currency} {product.originalPrice.toLocaleString()}
                   </Text>
-                )}
-              </View>
+                  <View style={styles.saveTag}>
+                    <Text style={styles.saveTagText}>
+                      SAVE {APP_CONFIG.currency}{' '}
+                      {(product.originalPrice - product.price).toLocaleString()}
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
             </View>
 
-            <View style={styles.warrantyBox}>
-              <Ionicons name="shield-checkmark" size={18} color={COLORS.success} />
-              <Text style={[styles.warrantyText, { color: colors.text }]}>{product.warranty}</Text>
+            <View style={[styles.serviceNoticeRow, { borderTopColor: colors.border }]}>
+              <View style={styles.serviceNoticeItem}>
+                <Ionicons name="checkmark-done-circle" size={16} color={COLORS.success} />
+                <Text style={[styles.serviceNoticeText, { color: colors.textSecondary }]}>
+                  Genuine Equipment
+                </Text>
+              </View>
+              <View style={styles.serviceNoticeItem}>
+                <Ionicons name="car-outline" size={16} color={COLORS.accent} />
+                <Text style={[styles.serviceNoticeText, { color: colors.textSecondary }]}>
+                  Nationwide Dispatch
+                </Text>
+              </View>
+              <View style={styles.serviceNoticeItem}>
+                <Ionicons name="construct-outline" size={16} color={COLORS.primary} />
+                <Text style={[styles.serviceNoticeText, { color: colors.textSecondary }]}>
+                  Expert Setup
+                </Text>
+              </View>
             </View>
           </View>
 
-          {/* Quantity Selector */}
-          <View style={styles.qtySection}>
-            <Text style={[styles.qtyLabel, { color: colors.text }]}>Quantity:</Text>
-            <View style={[styles.qtyControls, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+          {/* Quantity Selector Bar */}
+          <View style={[styles.qtySelectorBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View>
+              <Text style={[styles.qtyTitle, { color: colors.text }]}>Select Quantity</Text>
+              <Text style={[styles.qtySub, { color: colors.textSecondary }]}>Units for installation</Text>
+            </View>
+            <View style={[styles.stepperBox, { borderColor: colors.border, backgroundColor: colors.surfaceVariant }]}>
               <TouchableOpacity
                 onPress={() => setQuantity(Math.max(1, quantity - 1))}
-                style={styles.qtyBtn}
+                style={styles.stepperBtn}
+                activeOpacity={0.7}
               >
                 <Ionicons name="remove" size={18} color={colors.text} />
               </TouchableOpacity>
-              <Text style={[styles.qtyValue, { color: colors.text }]}>{quantity}</Text>
+              <Text style={[styles.stepperVal, { color: colors.text }]}>{quantity}</Text>
               <TouchableOpacity
                 onPress={() => setQuantity(quantity + 1)}
-                style={styles.qtyBtn}
+                style={styles.stepperBtn}
+                activeOpacity={0.7}
               >
                 <Ionicons name="add" size={18} color={colors.text} />
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Description */}
-          <View style={styles.detailSection}>
-            <Text style={[styles.sectionHeading, { color: colors.text }]}>Description</Text>
-            <Text style={[styles.descText, { color: colors.textSecondary }]}>
-              {product.description}
-            </Text>
+          {/* Interactive Segmented Tabs */}
+          <View style={[styles.tabBar, { borderBottomColor: colors.border }]}>
+            <TouchableOpacity
+              onPress={() => setActiveTab('overview')}
+              style={[styles.tabItem, activeTab === 'overview' && styles.tabItemActive]}
+            >
+              <Ionicons
+                name="document-text-outline"
+                size={16}
+                color={activeTab === 'overview' ? COLORS.primary : colors.textSecondary}
+              />
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: activeTab === 'overview' ? COLORS.primary : colors.textSecondary },
+                  activeTab === 'overview' && styles.tabTextActive,
+                ]}
+              >
+                Overview
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setActiveTab('specs')}
+              style={[styles.tabItem, activeTab === 'specs' && styles.tabItemActive]}
+            >
+              <Ionicons
+                name="list-outline"
+                size={16}
+                color={activeTab === 'specs' ? COLORS.primary : colors.textSecondary}
+              />
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: activeTab === 'specs' ? COLORS.primary : colors.textSecondary },
+                  activeTab === 'specs' && styles.tabTextActive,
+                ]}
+              >
+                Specifications
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setActiveTab('support')}
+              style={[styles.tabItem, activeTab === 'support' && styles.tabItemActive]}
+            >
+              <Ionicons
+                name="headset-outline"
+                size={16}
+                color={activeTab === 'support' ? COLORS.primary : colors.textSecondary}
+              />
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: activeTab === 'support' ? COLORS.primary : colors.textSecondary },
+                  activeTab === 'support' && styles.tabTextActive,
+                ]}
+              >
+                Support
+              </Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Key Features */}
-          {product.features && product.features.length > 0 && (
-            <View style={styles.detailSection}>
-              <Text style={[styles.sectionHeading, { color: colors.text }]}>Key Highlights</Text>
-              {product.features.map((feat, index) => (
-                <View key={index} style={styles.featureItem}>
-                  <Ionicons name="checkmark-circle" size={16} color={COLORS.primary} style={styles.featureIcon} />
-                  <Text style={[styles.featureText, { color: colors.text }]}>{feat}</Text>
+          {/* TAB 1: OVERVIEW & DESCRIPTION */}
+          {activeTab === 'overview' && (
+            <View style={styles.tabContentContainer}>
+              {/* Description Section */}
+              <View style={[styles.cardSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={styles.sectionHeaderRow}>
+                  <Ionicons name="reader-outline" size={18} color={COLORS.primary} />
+                  <Text style={[styles.sectionHeading, { color: colors.text }]}>Product Overview</Text>
                 </View>
-              ))}
+                <Text style={[styles.descriptionBody, { color: colors.text }]}>
+                  {product.description}
+                </Text>
+              </View>
+
+              {/* Highlights & Features Checklist */}
+              {product.features && product.features.length > 0 && (
+                <View style={[styles.cardSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <View style={styles.sectionHeaderRow}>
+                    <Ionicons name="checkmark-circle-outline" size={18} color={COLORS.success} />
+                    <Text style={[styles.sectionHeading, { color: colors.text }]}>Key Highlights & Features</Text>
+                  </View>
+                  <View style={styles.featuresList}>
+                    {product.features.map((feature, idx) => (
+                      <View key={idx} style={styles.featureRow}>
+                        <View style={styles.featureIconBubble}>
+                          <Ionicons name="checkmark" size={13} color={COLORS.success} />
+                        </View>
+                        <Text style={[styles.featureText, { color: colors.text }]}>{feature}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
             </View>
           )}
 
-          {/* Technical Specifications */}
-          {product.specs && Object.keys(product.specs).length > 0 && (
-            <View style={styles.detailSection}>
-              <Text style={[styles.sectionHeading, { color: colors.text }]}>
-                Technical Specifications
-              </Text>
-              <View style={[styles.specsTable, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-                {Object.entries(product.specs).map(([specKey, specVal], idx) => (
-                  <View
-                    key={specKey}
-                    style={[
-                      styles.specRow,
-                      { borderBottomColor: colors.border },
-                      idx === Object.keys(product.specs).length - 1 && { borderBottomWidth: 0 },
-                    ]}
-                  >
-                    <Text style={[styles.specKey, { color: colors.textSecondary }]}>{specKey}</Text>
-                    <Text style={[styles.specVal, { color: colors.text }]}>{specVal}</Text>
-                  </View>
-                ))}
+          {/* TAB 2: TECHNICAL SPECIFICATIONS */}
+          {activeTab === 'specs' && (
+            <View style={styles.tabContentContainer}>
+              <View style={[styles.cardSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={styles.sectionHeaderRow}>
+                  <Ionicons name="hardware-chip-outline" size={18} color={COLORS.primary} />
+                  <Text style={[styles.sectionHeading, { color: colors.text }]}>Technical Data Sheet</Text>
+                </View>
+
+                <View style={[styles.specsTableContainer, { borderColor: colors.border }]}>
+                  {Object.entries(product.specs).map(([specKey, specVal], idx) => (
+                    <View
+                      key={specKey}
+                      style={[
+                        styles.specsTableRow,
+                        {
+                          backgroundColor: idx % 2 === 0 ? colors.surface : colors.surfaceVariant,
+                          borderBottomColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.specKeyText, { color: colors.textSecondary }]}>
+                        {specKey}
+                      </Text>
+                      <Text style={[styles.specValueText, { color: colors.text }]}>
+                        {specVal}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
               </View>
             </View>
           )}
 
-          <View style={{ height: 100 }} />
+          {/* TAB 3: WARRANTY & SERVICE DESK */}
+          {activeTab === 'support' && (
+            <View style={styles.tabContentContainer}>
+              <View style={[styles.cardSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={styles.sectionHeaderRow}>
+                  <Ionicons name="shield-outline" size={18} color={COLORS.primary} />
+                  <Text style={[styles.sectionHeading, { color: colors.text }]}>Warranty & Official Guarantee</Text>
+                </View>
+                <Text style={[styles.descriptionBody, { color: colors.text }]}>
+                  This product comes with {product.warranty}. Radical Engineering provides complete on-site warranty diagnostics, maintenance, and technical consultation across Kishoreganj and nationwide.
+                </Text>
+
+                <View style={styles.supportContactBox}>
+                  <Text style={[styles.supportContactTitle, { color: colors.text }]}>Need Help or Sizing Confirmation?</Text>
+                  <Text style={[styles.supportContactSub, { color: colors.textSecondary }]}>
+                    Speak directly with a certified electrical and solar engineer before finalizing your equipment order.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.callHotlineButton}
+                    onPress={handleCallHotline}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="call" size={16} color="#FFFFFF" />
+                    <Text style={styles.callHotlineText}>Call Hotline: {APP_CONFIG.hotline1}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Bottom Space for Floating Action Bar */}
+          <View style={{ height: 110 }} />
         </View>
       </ScrollView>
 
-      {/* Floating Bottom Action Bar */}
-      <View style={[styles.bottomBar, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
+      {/* Floating Bottom Sticky Action Bar */}
+      <View
+        style={[
+          styles.bottomActionBar,
+          {
+            backgroundColor: colors.surface,
+            borderTopColor: colors.border,
+            shadowColor: colors.cardShadow,
+          },
+        ]}
+      >
         <TouchableOpacity
-          style={styles.consultBtn}
+          style={styles.whatsAppActionBtn}
           onPress={handleWhatsAppConsult}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
         >
-          <Ionicons name="logo-whatsapp" size={18} color="#25D366" />
-          <Text style={styles.consultBtnText}>WhatsApp</Text>
+          <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
+          <Text style={styles.whatsAppActionText}>WhatsApp</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.addToCartBtn}
+          style={styles.addToCartActionBtn}
           onPress={() => addToCart(product, quantity)}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
         >
           <Ionicons name="cart" size={18} color="#FFFFFF" />
-          <Text style={styles.addToCartBtnText}>Add to Cart</Text>
+          <Text style={styles.addToCartActionText}>Add to Cart</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.buyNowBtn}
+          style={styles.buyNowActionBtn}
           onPress={handleAddToCartAndCart}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
         >
-          <Text style={styles.buyNowBtnText}>Buy Now</Text>
+          <Text style={styles.buyNowActionText}>Buy Now</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -263,38 +498,51 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    padding: SPACING.xl,
+  },
+  loadingText: {
+    marginTop: SPACING.md,
+    fontSize: 14,
+    fontWeight: '600',
   },
   notFoundText: {
     fontSize: 16,
     fontWeight: '700',
+    marginTop: SPACING.sm,
     marginBottom: SPACING.md,
   },
   backBtn: {
     backgroundColor: COLORS.primary,
     paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.sm + 2,
     borderRadius: RADIUS.md,
   },
   backBtnText: {
     color: '#FFFFFF',
     fontWeight: '700',
   },
-  imageStage: {
+  heroImageContainer: {
     width: '100%',
-    height: 260,
-    backgroundColor: '#F1F5F9',
+    height: 300,
+    backgroundColor: '#F8FAFC',
     position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  mainImage: {
-    width: '100%',
-    height: '100%',
+  mainHeroImage: {
+    width: '85%',
+    height: '85%',
   },
-  floatingWishlist: {
+  floatingTopActions: {
     position: 'absolute',
-    top: 16,
-    right: 16,
-    width: 40,
-    height: 40,
+    top: 14,
+    right: 14,
+    flexDirection: 'column',
+    gap: 8,
+  },
+  floatingActionBtn: {
+    width: 38,
+    height: 38,
     borderRadius: RADIUS.full,
     alignItems: 'center',
     justifyContent: 'center',
@@ -304,57 +552,96 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  wattageTag: {
+  floatingBadgesRow: {
     position: 'absolute',
     bottom: 12,
-    left: 16,
+    left: 14,
+    right: 14,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  wattagePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: COLORS.primary,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: RADIUS.sm,
+    gap: 4,
   },
-  wattageTagText: {
+  wattagePillText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
   },
-  contentBody: {
+  subCatPill: {
+    backgroundColor: '#0F172A',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+  },
+  subCatPillText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  stockPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+    gap: 5,
+  },
+  stockDotWhite: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
+  },
+  stockPillText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  infoWrapper: {
     padding: SPACING.md,
   },
-  metaRow: {
+  brandRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 6,
   },
-  categoryBadge: {
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  stockBadge: {
-    paddingHorizontal: 8,
+  brandTagWrapper: {
+    backgroundColor: COLORS.primaryLight,
+    paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: RADIUS.sm,
   },
-  stockText: {
+  brandTagText: {
+    color: COLORS.primary,
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    lineHeight: 24,
-    marginBottom: 6,
+  skuText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
-  subInfoRow: {
+  mainTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    lineHeight: 26,
+    marginBottom: 8,
+  },
+  metaStrip: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: SPACING.md,
-  },
-  modelText: {
-    fontSize: 12,
   },
   ratingBadge: {
     flexDirection: 'row',
@@ -363,97 +650,189 @@ const styles = StyleSheet.create({
   },
   ratingScore: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#F59E0B',
   },
   reviewsCount: {
     fontSize: 11,
   },
-  priceBox: {
+  warrantyStripBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  warrantyStripText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  priceCard: {
+    padding: SPACING.md,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    marginBottom: SPACING.md,
+    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 5,
+  },
+  priceRowTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.sm + 4,
+  },
+  priceLeadLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  priceNumbersRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+  },
+  currencySymbol: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  priceAmount: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: COLORS.primary,
+  },
+  savingsBox: {
+    alignItems: 'flex-end',
+  },
+  strikeThroughPrice: {
+    fontSize: 13,
+    textDecorationLine: 'line-through',
+  },
+  saveTag: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: RADIUS.sm,
+    marginTop: 2,
+  },
+  saveTagText: {
+    color: '#166534',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  serviceNoticeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    paddingTop: SPACING.sm + 2,
+  },
+  serviceNoticeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  serviceNoticeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  qtySelectorBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: SPACING.md,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     borderWidth: 1,
     marginBottom: SPACING.md,
   },
-  priceLabel: {
-    fontSize: 11,
-    color: '#64748B',
-    marginBottom: 2,
-  },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 8,
-  },
-  priceMain: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: COLORS.primary,
-  },
-  originalPrice: {
-    fontSize: 13,
-    textDecorationLine: 'line-through',
-  },
-  warrantyBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    maxWidth: 130,
-  },
-  warrantyText: {
-    fontSize: 11,
-    fontWeight: '600',
-    lineHeight: 14,
-  },
-  qtySection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: SPACING.lg,
-  },
-  qtyLabel: {
+  qtyTitle: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
   },
-  qtyControls: {
+  qtySub: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  stepperBox: {
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: RADIUS.md,
     borderWidth: 1,
   },
-  qtyBtn: {
+  stepperBtn: {
     width: 36,
     height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  qtyValue: {
+  stepperVal: {
     paddingHorizontal: 12,
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '800',
   },
-  detailSection: {
-    marginBottom: SPACING.lg,
+  tabBar: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    marginBottom: SPACING.md,
+  },
+  tabItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    gap: 6,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabItemActive: {
+    borderBottomColor: COLORS.primary,
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  tabTextActive: {
+    fontWeight: '800',
+  },
+  tabContentContainer: {
+    gap: SPACING.md,
+  },
+  cardSection: {
+    padding: SPACING.md,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: SPACING.sm + 2,
   },
   sectionHeading: {
     fontSize: 15,
-    fontWeight: '700',
-    marginBottom: SPACING.sm,
+    fontWeight: '800',
   },
-  descText: {
-    fontSize: 13,
-    lineHeight: 20,
+  descriptionBody: {
+    fontSize: 13.5,
+    lineHeight: 22,
   },
-  featureItem: {
+  featuresList: {
+    gap: 10,
+    marginTop: 4,
+  },
+  featureRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 6,
+    gap: 10,
   },
-  featureIcon: {
-    marginRight: 8,
+  featureIconBubble: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginTop: 2,
   },
   featureText: {
@@ -461,27 +840,59 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     flex: 1,
   },
-  specsTable: {
-    borderRadius: RADIUS.md,
+  specsTableContainer: {
     borderWidth: 1,
+    borderRadius: RADIUS.md,
     overflow: 'hidden',
+    marginTop: 4,
   },
-  specRow: {
+  specsTableRow: {
     flexDirection: 'row',
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
   },
-  specKey: {
+  specKeyText: {
     flex: 1.2,
     fontSize: 12,
+    fontWeight: '500',
   },
-  specVal: {
+  specValueText: {
     flex: 1.5,
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
   },
-  bottomBar: {
+  supportContactBox: {
+    backgroundColor: COLORS.primaryLight,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    marginTop: SPACING.md,
+  },
+  supportContactTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  supportContactSub: {
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: SPACING.md,
+  },
+  callHotlineButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.md,
+    paddingVertical: 11,
+    gap: 8,
+  },
+  callHotlineText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  bottomActionBar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
@@ -492,50 +903,50 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm + 4,
     borderTopWidth: 1,
     gap: 8,
+    elevation: 8,
   },
-  consultBtn: {
+  whatsAppActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: '#25D366',
     borderRadius: RADIUS.md,
-    paddingHorizontal: 10,
-    height: 44,
-    gap: 4,
+    paddingHorizontal: 12,
+    height: 46,
+    gap: 6,
   },
-  consultBtnText: {
+  whatsAppActionText: {
     color: '#25D366',
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
   },
-  addToCartBtn: {
+  addToCartActionBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#0F172A',
     borderRadius: RADIUS.md,
-    height: 44,
+    height: 46,
     gap: 6,
   },
-  addToCartBtnText: {
+  addToCartActionText: {
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
   },
-  buyNowBtn: {
+  buyNowActionBtn: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.primary,
     borderRadius: RADIUS.md,
-    height: 44,
+    height: 46,
   },
-  buyNowBtnText: {
+  buyNowActionText: {
     color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '800',
   },
 });
-

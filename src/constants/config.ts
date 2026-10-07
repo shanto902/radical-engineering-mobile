@@ -1,8 +1,33 @@
+const rawApiUrl =
+  process.env.EXPO_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  'https://admin.atiar.com.bd';
+
+// Normalize trailing slash
+const apiBaseUrl = rawApiUrl.replace(/\/+$/, '');
+
+const rawAssetsUrl =
+  process.env.EXPO_PUBLIC_ASSETS_URL ||
+  process.env.NEXT_PUBLIC_ASSETS_URL ||
+  `${apiBaseUrl}/assets`;
+
+const assetsBaseUrl = rawAssetsUrl.replace(/\/+$/, '');
+
+const accessToken =
+  process.env.EXPO_PUBLIC_ACCESS_TOKEN ||
+  process.env.ACCESS_TOKEN ||
+  'tlaoVoH-cJOVcNpAadhVFGQzHmAO3W5y';
+
 export const APP_CONFIG = {
   companyName: 'Radical Engineering',
   tagline: 'Powering your home with trusted solar and battery solutions',
-  website: 'https://radicalengineering.com.bd',
-  apiBaseUrl: 'https://admin.atiar.com.bd',
+  website:
+    process.env.EXPO_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    'https://radicalengineering.com.bd',
+  apiBaseUrl,
+  assetsBaseUrl,
+  accessToken,
   hotline1: '+880 1760195100',
   hotline2: '+880 1787224460',
   hotline1Raw: '+8801760195100',
@@ -16,4 +41,3 @@ export const APP_CONFIG = {
   currency: '৳',
   currencyCode: 'BDT',
 };
-

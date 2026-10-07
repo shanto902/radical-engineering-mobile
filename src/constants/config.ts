@@ -1,33 +1,26 @@
 const rawApiUrl =
-  process.env.EXPO_PUBLIC_API_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  'https://admin.atiar.com.bd';
+  process.env.EXPO_PUBLIC_API_URL || 'https://admin.atiar.com.bd';
 
 // Normalize trailing slash
 const apiBaseUrl = rawApiUrl.replace(/\/+$/, '');
 
 const rawAssetsUrl =
-  process.env.EXPO_PUBLIC_ASSETS_URL ||
-  process.env.NEXT_PUBLIC_ASSETS_URL ||
-  `${apiBaseUrl}/assets`;
+  process.env.EXPO_PUBLIC_ASSETS_URL || `${apiBaseUrl}/assets`;
 
 const assetsBaseUrl = rawAssetsUrl.replace(/\/+$/, '');
 
 const accessToken =
-  process.env.EXPO_PUBLIC_ACCESS_TOKEN ||
-  process.env.ACCESS_TOKEN ||
-  'tlaoVoH-cJOVcNpAadhVFGQzHmAO3W5y';
+  process.env.EXPO_PUBLIC_ACCESS_TOKEN || 'tlaoVoH-cJOVcNpAadhVFGQzHmAO3W5y';
 
 export const APP_CONFIG = {
   companyName: 'Radical Engineering',
   tagline: 'Powering your home with trusted solar and battery solutions',
   website:
-    process.env.EXPO_PUBLIC_SITE_URL ||
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    'https://radicalengineering.com.bd',
+    process.env.EXPO_PUBLIC_SITE_URL || 'https://radicalengineering.com.bd',
   apiBaseUrl,
   assetsBaseUrl,
   accessToken,
+  googleReviewApi: process.env.EXPO_PUBLIC_GOOGLE_REVIEW_API || '',
   hotline1: '+880 1760195100',
   hotline2: '+880 1787224460',
   hotline1Raw: '+8801760195100',

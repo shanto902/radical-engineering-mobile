@@ -164,14 +164,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             badge="TRACK"
             onPress={() => navigation.navigate('OrderTracker')}
           />
-
-          <QuickActionCard
-            title="E-Learning & Battery Longevity Guides"
-            subtitle="Learn battery preservation, DM water checks & lightning protection standards."
-            icon="book-outline"
-            color="#8B5CF6"
-            onPress={() => navigation.navigate('ELearning')}
-          />
         </View>
 
         {/* Authorized Brands Marquee Strip */}

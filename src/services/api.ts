@@ -1,7 +1,7 @@
 import { createDirectus, rest, staticToken, readItems, readItem, createItem } from '@directus/sdk';
 import { APP_CONFIG } from '../constants/config';
 import { CATEGORIES, PRODUCTS, PROJECTS, ELEARNING_ARTICLES, SAMPLE_ORDERS } from '../constants/mockData';
-import { Product, Category, Project, ELearningArticle, Order } from '../types';
+import { Product, ProductDoc, Category, Project, ELearningArticle, Order } from '../types';
 
 /**
  * Directus SDK Client configured with static Bearer Token
@@ -48,6 +48,39 @@ function extractFeatures(text: string): string[] {
 function extractWattage(title: string): string | undefined {
   const match = title.match(/(\d+(?:\.\d+)?\s*(?:kwp|kw|w|wp|ah|va|kwh))/i);
   return match ? match[1].toUpperCase() : undefined;
+}
+
+/**
+ * Parse Directus file reference into a ProductDoc object
+ */
+function parseDocument(
+  fileData: any,
+  defaultTitle: string,
+  type: 'datasheet' | 'manual' | 'document',
+  assetsUrl: string
+): ProductDoc | undefined {
+  if (!fileData) return undefined;
+  if (typeof fileData === 'string' && fileData.trim() !== '') {
+    return {
+      id: fileData,
+      title: defaultTitle,
+      filename: `${defaultTitle.toLowerCase().replace(/\s+/g, '_')}.pdf`,
+      type,
+      url: `${assetsUrl}/${fileData}`,
+    };
+  }
+  if (typeof fileData === 'object' && fileData.id) {
+    const sizeKb = fileData.filesize ? `${Math.round(Number(fileData.filesize) / 1024)} KB` : undefined;
+    return {
+      id: String(fileData.id),
+      title: fileData.title || fileData.filename_download || defaultTitle,
+      filename: fileData.filename_download || `${defaultTitle.toLowerCase().replace(/\s+/g, '_')}.pdf`,
+      type,
+      url: `${assetsUrl}/${fileData.id}`,
+      filesize: sizeKb,
+    };
+  }
+  return undefined;
 }
 
 class ApiService {
@@ -138,6 +171,18 @@ class ApiService {
     else if (item.name?.includes('24V') || cleanDesc.includes('24V')) specsMap['Nominal Voltage'] = '24V DC';
     else if (item.name?.includes('48V') || cleanDesc.includes('48V')) specsMap['Nominal Voltage'] = '48V DC';
 
+    const datasheetDoc = parseDocument(item.datasheet, 'Technical Datasheet', 'datasheet', this.assetsUrl);
+    const manualDoc = parseDocument(item.user_manual, 'User Manual', 'manual', this.assetsUrl);
+    const docList: ProductDoc[] = [];
+    if (datasheetDoc) {
+      docList.push(datasheetDoc);
+      specsMap['Datasheet (PDF)'] = datasheetDoc.filename || 'Available';
+    }
+    if (manualDoc) {
+      docList.push(manualDoc);
+      specsMap['User Manual (PDF)'] = manualDoc.filename || 'Available';
+    }
+
     return {
       id: String(item.id),
       title: item.name || item.title || 'Solar Equipment',
@@ -162,6 +207,7 @@ class ApiService {
       voltage: specsMap['Nominal Voltage'],
       warranty: specsMap['Warranty'],
       description: cleanDesc.length > 10 ? cleanDesc : `${item.name}. High efficiency equipment distributed and backed by Radical Engineering, Kishoreganj.`,
+      rawDescription: rawDesc.length > 5 ? rawDesc : undefined,
       shortDescription: cleanDesc.slice(0, 160),
       subCategory: item.sub_category,
       sku: item.sku,
@@ -173,6 +219,9 @@ class ApiService {
       ],
       specs: specsMap,
       isFeatured: true,
+      datasheet: datasheetDoc,
+      userManual: manualDoc,
+      documents: docList,
     };
   }
 
@@ -214,7 +263,7 @@ class ApiService {
   async getProducts(categoryId?: string, search?: string): Promise<Product[]> {
     await this.loadMetadata();
     try {
-      const query: any = { limit: 100 };
+      const query: any = { limit: 100, fields: ['*', 'datasheet.*', 'user_manual.*'] };
 
       // Map slug or ID filter
       if (categoryId && categoryId !== 'all') {
@@ -273,7 +322,7 @@ class ApiService {
     await this.loadMetadata();
     try {
       const item: any = await Promise.race([
-        directus.request(readItem('products' as any, id as any)),
+        directus.request(readItem('products' as any, id as any, { fields: ['*', 'datasheet.*', 'user_manual.*'] } as any)),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3500)),
       ]);
       if (item) {
@@ -289,23 +338,39 @@ class ApiService {
   async getProjects(): Promise<Project[]> {
     try {
       const data: any = await Promise.race([
-        directus.request(readItems('projects' as any, { limit: 20 } as any)),
+        directus.request(readItems('projects' as any, { limit: 30, fields: ['*'] } as any)),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 4000)),
       ]);
       if (Array.isArray(data) && data.length > 0) {
-        return data.map((item: any) => ({
-          id: String(item.id),
-          title: item.title,
-          slug: item.slug || String(item.id),
-          summary: item.summary || item.description?.slice(0, 100),
-          description: cleanHtml(item.description || ''),
-          category: item.category || 'Solar Installation',
-          date: item.date || 'Recent',
-          location: item.location || 'Bangladesh',
-          capacity: item.capacity || 'Custom',
-          image: item.image ? `${this.assetsUrl}/${item.image}` : PROJECTS[0].image,
-          highlights: item.highlights || [],
-        }));
+        return data.map((item: any) => {
+          const rawBody = item.body || '';
+          const shortDesc = item.short_description || cleanHtml(rawBody).slice(0, 160);
+          const cleanBody = cleanHtml(rawBody);
+          const dateStr = item.date || (item.date_created ? new Date(item.date_created).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recent');
+          const capacityMatch = item.title?.match(/(\d+(?:\.\d+)?\s*(?:kw|kilo\s*watt|w|va))/i);
+          const detectedCapacity = item.capacity || (capacityMatch ? capacityMatch[0].toUpperCase() : 'Field Installation');
+
+          return {
+            id: String(item.id),
+            title: item.title,
+            slug: item.slug || String(item.id),
+            summary: shortDesc,
+            shortDescription: shortDesc,
+            body: rawBody || shortDesc,
+            description: cleanBody.length > 5 ? cleanBody : shortDesc,
+            category: item.category || 'Solar & Electrical Installation',
+            date: dateStr,
+            location: item.location || 'Kishoreganj, Bangladesh',
+            capacity: detectedCapacity,
+            image: item.image ? `${this.assetsUrl}/${item.image}` : PROJECTS[0].image,
+            videos: Array.isArray(item.videos) ? item.videos : [],
+            highlights: item.highlights || [
+              'Engineered by certified electrical engineers',
+              'Full compliance with Bangladesh National Building Code (BNBC)',
+              'Comprehensive testing & warranty documentation',
+            ],
+          };
+        });
       }
     } catch {
       // Offline fallback
@@ -315,24 +380,62 @@ class ApiService {
 
   async getELearningArticles(): Promise<ELearningArticle[]> {
     try {
-      const data: any = await Promise.race([
-        directus.request(readItems('articles' as any, { limit: 20 } as any)),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 4000)),
+      const [projectsData, downloadsData]: [any, any] = await Promise.race([
+        Promise.all([
+          directus.request(readItems('projects' as any, { limit: 20, fields: ['*'] } as any)).catch(() => []),
+          directus.request(readItems('downloads' as any, { limit: 10, fields: ['*'] } as any)).catch(() => []),
+        ]),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 4500)),
       ]);
-      if (Array.isArray(data) && data.length > 0) {
-        return data.map((item: any) => ({
-          id: String(item.id),
-          title: item.title,
-          slug: item.slug || String(item.id),
-          category: item.category || 'Maintenance',
-          readTime: item.read_time || '5 min read',
-          publishedDate: item.published_date || 'Recent',
-          excerpt: cleanHtml(item.excerpt || ''),
-          content: Array.isArray(item.content) ? item.content : [cleanHtml(item.content || '')],
-          tags: item.tags || [],
-          author: item.author || 'Radical Engineering Team',
-          image: item.image ? `${this.assetsUrl}/${item.image}` : ELEARNING_ARTICLES[0].image,
-        }));
+
+      const list: ELearningArticle[] = [];
+
+      // Add educational and technical guide articles from projects
+      if (Array.isArray(projectsData) && projectsData.length > 0) {
+        projectsData.forEach((item: any) => {
+          const rawBody = item.body || '';
+          const shortDesc = item.short_description || cleanHtml(rawBody).slice(0, 160);
+          list.push({
+            id: `project-${item.id}`,
+            title: item.title,
+            slug: item.slug || String(item.id),
+            category: item.category || 'Solar Knowledge & Maintenance',
+            readTime: '4 min read',
+            publishedDate: item.date_created ? new Date(item.date_created).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recent',
+            excerpt: shortDesc,
+            bodyHtml: rawBody || shortDesc,
+            content: [shortDesc],
+            tags: item.tags || ['Solar', 'IPS', 'Maintenance', 'Battery'],
+            author: 'Radical Engineering Team',
+            image: item.image ? `${this.assetsUrl}/${item.image}` : ELEARNING_ARTICLES[0].image,
+          });
+        });
+      }
+
+      // Add official downloadable technical CBLM manuals from downloads
+      if (Array.isArray(downloadsData) && downloadsData.length > 0) {
+        downloadsData.forEach((item: any) => {
+          list.push({
+            id: `download-${item.id}`,
+            title: item.name || 'Official Technical Material',
+            slug: item.id,
+            category: 'Official Engineering Manual (PDF)',
+            readTime: 'PDF Document',
+            publishedDate: item.date_created ? new Date(item.date_created).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recent',
+            excerpt: item.description || 'Competency-based technical learning material and standards.',
+            bodyHtml: `<p>${item.description || ''}</p>`,
+            content: [item.description || ''],
+            tags: ['PDF', 'Manual', 'NSDA', 'CBLM'],
+            author: 'National Skills Development Authority / Radical Engineering',
+            image: ELEARNING_ARTICLES[1]?.image || ELEARNING_ARTICLES[0].image,
+            downloadUrl: item.file ? `${this.assetsUrl}/${item.file}` : undefined,
+            downloadFilename: item.name ? `${item.name}.pdf` : 'manual.pdf',
+          });
+        });
+      }
+
+      if (list.length > 0) {
+        return list;
       }
     } catch {
       // Offline fallback

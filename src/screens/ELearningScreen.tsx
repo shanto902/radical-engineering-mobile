@@ -7,9 +7,11 @@ import {
   Image,
   TouchableOpacity,
   Share,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Header } from '../components/Header';
+import { RichText } from '../components/RichText';
 import { useTheme } from '../context/ThemeContext';
 import { apiService } from '../services/api';
 import { ELearningArticle } from '../types';
@@ -93,14 +95,33 @@ export const ELearningScreen: React.FC<ELearningScreenProps> = ({ navigation }) 
                 {/* Expanded full body */}
                 {isExpanded && (
                   <View style={[styles.expandedBody, { borderTopColor: colors.border }]}>
-                    {art.content.map((paragraph, pIdx) => (
-                      <Text
-                        key={pIdx}
-                        style={[styles.paragraphText, { color: colors.text }]}
+                    {art.bodyHtml ? (
+                      <RichText html={art.bodyHtml} />
+                    ) : (
+                      art.content.map((paragraph, pIdx) => (
+                        <Text
+                          key={pIdx}
+                          style={[styles.paragraphText, { color: colors.text }]}
+                        >
+                          {paragraph}
+                        </Text>
+                      ))
+                    )}
+
+                    {/* Official PDF Download Button if available */}
+                    {art.downloadUrl && (
+                      <TouchableOpacity
+                        style={styles.pdfDownloadBtn}
+                        onPress={() => Linking.openURL(art.downloadUrl!)}
+                        activeOpacity={0.85}
                       >
-                        {paragraph}
-                      </Text>
-                    ))}
+                        <Ionicons name="document-text" size={18} color="#FFFFFF" />
+                        <Text style={styles.pdfDownloadBtnText}>
+                          Download Official PDF Document ({art.downloadFilename || 'Manual'})
+                        </Text>
+                        <Ionicons name="download-outline" size={16} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    )}
 
                     <View style={styles.tagsRow}>
                       {art.tags.map((tag, tIdx) => (
@@ -268,6 +289,23 @@ const styles = StyleSheet.create({
   },
   shareBtn: {
     padding: 4,
+  },
+  pdfDownloadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: RADIUS.md,
+    marginVertical: SPACING.xs,
+    gap: 8,
+  },
+  pdfDownloadBtnText: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });
 

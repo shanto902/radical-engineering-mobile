@@ -10,7 +10,9 @@ import {
   Modal,
   Alert,
   Linking,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Header } from '../components/Header';
 import { useTheme } from '../context/ThemeContext';
@@ -25,6 +27,8 @@ interface CartScreenProps {
 export const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
   const { colors } = useTheme();
   const { cart, removeFromCart, updateQuantity, clearCart, totalAmount } = useCart();
+  const insets = useSafeAreaInsets();
+  const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 16 : 10);
 
   const [checkoutVisible, setCheckoutVisible] = useState(false);
   const [customerName, setCustomerName] = useState('');
@@ -213,7 +217,7 @@ export const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
             </TouchableOpacity>
           </View>
 
-          <View style={{ height: 40 }} />
+          <View style={{ height: 30 + bottomPadding }} />
         </ScrollView>
       )}
 
@@ -225,7 +229,15 @@ export const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
         onRequestClose={() => setCheckoutVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+          <View
+            style={[
+              styles.modalContent,
+              {
+                backgroundColor: colors.surface,
+                paddingBottom: bottomPadding + SPACING.md,
+              },
+            ]}
+          >
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>Checkout & Delivery</Text>
               <TouchableOpacity onPress={() => setCheckoutVisible(false)}>

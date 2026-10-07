@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Linking, Platform, StatusBar as RNStatusBar } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useCart } from '../context/CartContext';
@@ -25,13 +26,27 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const { colors, isDark, toggleTheme } = useTheme();
   const { totalItemsCount } = useCart();
+  const insets = useSafeAreaInsets();
 
   const handleCall = () => {
     Linking.openURL(`tel:${APP_CONFIG.hotline1Raw}`);
   };
 
+  const androidStatusBar = RNStatusBar.currentHeight ?? 24;
+  const topInset = Math.max(insets.top, Platform.OS === 'android' ? androidStatusBar : 0);
+  const safeTopPadding = topInset + 8;
+
   return (
-    <View style={[styles.container, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.surface,
+          borderBottomColor: colors.border,
+          paddingTop: safeTopPadding,
+        },
+      ]}
+    >
       <View style={styles.leftContainer}>
         {showBack ? (
           <TouchableOpacity onPress={onBack} style={styles.iconButton}>

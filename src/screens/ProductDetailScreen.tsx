@@ -9,13 +9,17 @@ import {
   Linking,
   ActivityIndicator,
   Share,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
 import { Header } from '../components/Header';
 import { useTheme } from '../context/ThemeContext';
 import { useCart } from '../context/CartContext';
 import { apiService } from '../services/api';
-import { Product } from '../types';
+import { Product, ProductDoc } from '../types';
+import { RichText } from '../components/RichText';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
 import { APP_CONFIG } from '../constants/config';
 
@@ -25,15 +29,19 @@ interface ProductDetailScreenProps {
 }
 
 type DetailTab = 'overview' | 'specs' | 'support';
+type SupportSubTab = 'manuals' | 'warranty';
 
 export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ navigation, route }) => {
   const { colors, isDark } = useTheme();
   const { addToCart, toggleWishlist, isWishlisted } = useCart();
   const { productId } = route.params;
+  const insets = useSafeAreaInsets();
+  const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 16 : 10);
 
   const [product, setProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState<DetailTab>('overview');
+  const [supportSubTab, setSupportSubTab] = useState<SupportSubTab>('manuals');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -88,6 +96,39 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
 
   const handleCallHotline = () => {
     Linking.openURL(`tel:${APP_CONFIG.hotline1Raw}`);
+  };
+
+  const handleOpenPdf = async (doc: ProductDoc) => {
+    if (!doc.url) return;
+    try {
+      await WebBrowser.openBrowserAsync(doc.url, {
+        presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+        toolbarColor: COLORS.primary,
+        controlsColor: '#FFFFFF',
+        showTitle: true,
+        enableDefaultShareMenuItem: true,
+      });
+    } catch {
+      Linking.openURL(doc.url);
+    }
+  };
+
+  const handleSharePdf = async (doc: ProductDoc) => {
+    try {
+      await Share.share({
+        title: `${product.title} - ${doc.title}`,
+        message: `Download ${doc.title} for ${product.title} from Radical Engineering:\n${doc.url}`,
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleRequestManual = () => {
+    const message = encodeURIComponent(
+      `Hello Radical Engineering,\n\nI need the official PDF technical datasheet / manual for:\n${product.title} (Brand: ${product.brand}, SKU: ${product.sku || product.model}).\n\nPlease share the document file or link.`
+    );
+    Linking.openURL(`https://wa.me/${APP_CONFIG.whatsappNumber.replace('+', '')}?text=${message}`);
   };
 
   const handleAddToCartAndCart = () => {
@@ -196,6 +237,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
               </Text>
             </View>
           </View>
+
 
           {/* Premium Price Showcase Card */}
           <View
@@ -339,7 +381,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
                   activeTab === 'support' && styles.tabTextActive,
                 ]}
               >
-                Support
+                Support & Docs
               </Text>
             </TouchableOpacity>
           </View>
@@ -347,15 +389,80 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
           {/* TAB 1: OVERVIEW & DESCRIPTION */}
           {activeTab === 'overview' && (
             <View style={styles.tabContentContainer}>
-              {/* Description Section */}
+              {/* Description Section with RichText */}
               <View style={[styles.cardSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <View style={styles.sectionHeaderRow}>
                   <Ionicons name="reader-outline" size={18} color={COLORS.primary} />
                   <Text style={[styles.sectionHeading, { color: colors.text }]}>Product Overview</Text>
                 </View>
-                <Text style={[styles.descriptionBody, { color: colors.text }]}>
-                  {product.description}
-                </Text>
+                <RichText
+                  html={product.rawDescription || product.description}
+                  baseTextStyle={[styles.descriptionBody, { color: colors.text }]}
+                />
+              </View>
+
+              {/* Official Technical Documents & Manuals (PDF) */}
+              <View style={[styles.cardSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                <View style={styles.sectionHeaderRow}>
+                  <Ionicons name="document-attach-outline" size={18} color={COLORS.primary} />
+                  <Text style={[styles.sectionHeading, { color: colors.text }]}>Documents & Manuals (PDF)</Text>
+                </View>
+
+                {product.documents && product.documents.length > 0 ? (
+                  <View style={styles.docListContainer}>
+                    {product.documents.map((doc, docIdx) => (
+                      <View
+                        key={docIdx}
+                        style={[styles.docCard, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}
+                      >
+                        <View style={styles.docIconBox}>
+                          <Ionicons
+                            name={doc.type === 'manual' ? 'book' : 'document-text'}
+                            size={22}
+                            color={doc.type === 'manual' ? '#15803D' : '#1D4ED8'}
+                          />
+                        </View>
+                        <View style={styles.docInfo}>
+                          <Text style={[styles.docTitle, { color: colors.text }]} numberOfLines={1}>
+                            {doc.title}
+                          </Text>
+                          <Text style={[styles.docMeta, { color: colors.textSecondary }]}>
+                            {doc.type === 'manual' ? 'User Installation Manual' : 'Technical Specifications Sheet'}
+                            {doc.filesize ? ` • ${doc.filesize}` : ''}
+                          </Text>
+                        </View>
+                        <View style={styles.docActionButtons}>
+                          <TouchableOpacity
+                            style={styles.docOpenBtn}
+                            onPress={() => handleOpenPdf(doc)}
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons name="open-outline" size={14} color="#FFFFFF" />
+                            <Text style={styles.docOpenBtnText}>Open</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.docShareBtn, { backgroundColor: colors.surface }]}
+                            onPress={() => handleSharePdf(doc)}
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons name="share-social-outline" size={15} color={colors.text} />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <View style={[styles.noDocCard, { backgroundColor: colors.surfaceVariant }]}>
+                    <Ionicons name="information-circle-outline" size={20} color={colors.textSecondary} />
+                    <Text style={[styles.noDocText, { color: colors.textSecondary }]}>
+                      Need the full wiring diagram, datasheet, or user manual for this model?
+                    </Text>
+                    <TouchableOpacity style={styles.requestManualBtn} onPress={handleRequestManual}>
+                      <Ionicons name="logo-whatsapp" size={14} color="#15803D" />
+                      <Text style={styles.requestManualText}>Request PDF from Engineering Desk</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
 
               {/* Highlights & Features Checklist */}
@@ -411,41 +518,314 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
                   ))}
                 </View>
               </View>
+
+              {/* Official Documents in Specs Tab */}
+              {product.documents && product.documents.length > 0 && (
+                <View style={[styles.cardSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <View style={styles.sectionHeaderRow}>
+                    <Ionicons name="document-text-outline" size={18} color={COLORS.primary} />
+                    <Text style={[styles.sectionHeading, { color: colors.text }]}>Manufacturer PDF Files</Text>
+                  </View>
+                  <View style={styles.docListContainer}>
+                    {product.documents.map((doc, docIdx) => (
+                      <View
+                        key={docIdx}
+                        style={[styles.docCard, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}
+                      >
+                        <View style={styles.docIconBox}>
+                          <Ionicons
+                            name={doc.type === 'manual' ? 'book' : 'document-text'}
+                            size={22}
+                            color={doc.type === 'manual' ? '#15803D' : '#1D4ED8'}
+                          />
+                        </View>
+                        <View style={styles.docInfo}>
+                          <Text style={[styles.docTitle, { color: colors.text }]} numberOfLines={1}>
+                            {doc.title}
+                          </Text>
+                          <Text style={[styles.docMeta, { color: colors.textSecondary }]}>
+                            {doc.type === 'manual' ? 'User Manual' : 'Datasheet'}
+                            {doc.filesize ? ` • ${doc.filesize}` : ''}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          style={styles.docOpenBtn}
+                          onPress={() => handleOpenPdf(doc)}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="open-outline" size={14} color="#FFFFFF" />
+                          <Text style={styles.docOpenBtnText}>Open</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
             </View>
           )}
 
-          {/* TAB 3: WARRANTY & SERVICE DESK */}
+          {/* TAB 3: SUPPORT & DOCUMENTATION */}
           {activeTab === 'support' && (
             <View style={styles.tabContentContainer}>
-              <View style={[styles.cardSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <View style={styles.sectionHeaderRow}>
-                  <Ionicons name="shield-outline" size={18} color={COLORS.primary} />
-                  <Text style={[styles.sectionHeading, { color: colors.text }]}>Warranty & Official Guarantee</Text>
-                </View>
-                <Text style={[styles.descriptionBody, { color: colors.text }]}>
-                  This product comes with {product.warranty}. Radical Engineering provides complete on-site warranty diagnostics, maintenance, and technical consultation across Kishoreganj and nationwide.
-                </Text>
-
-                <View style={styles.supportContactBox}>
-                  <Text style={[styles.supportContactTitle, { color: colors.text }]}>Need Help or Sizing Confirmation?</Text>
-                  <Text style={[styles.supportContactSub, { color: colors.textSecondary }]}>
-                    Speak directly with a certified electrical and solar engineer before finalizing your equipment order.
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.callHotlineButton}
-                    onPress={handleCallHotline}
-                    activeOpacity={0.85}
+              {/* Support Sub-Tabs Segmented Bar */}
+              <View
+                style={[
+                  styles.supportSubTabBar,
+                  { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' },
+                ]}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.supportSubTabItem,
+                    supportSubTab === 'manuals' && [
+                      styles.supportSubTabItemActive,
+                      { backgroundColor: colors.surface },
+                    ],
+                  ]}
+                  onPress={() => setSupportSubTab('manuals')}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons
+                    name="document-text-outline"
+                    size={15}
+                    color={supportSubTab === 'manuals' ? COLORS.primary : colors.textSecondary}
+                  />
+                  <Text
+                    style={[
+                      styles.supportSubTabText,
+                      { color: supportSubTab === 'manuals' ? COLORS.primary : colors.textSecondary },
+                    ]}
                   >
-                    <Ionicons name="call" size={16} color="#FFFFFF" />
-                    <Text style={styles.callHotlineText}>Call Hotline: {APP_CONFIG.hotline1}</Text>
-                  </TouchableOpacity>
-                </View>
+                    Datasheet & Manuals
+                  </Text>
+                  {product.documents && product.documents.length > 0 && (
+                    <View style={styles.supportDocCountBadge}>
+                      <Text style={styles.supportDocCountBadgeText}>{product.documents.length}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.supportSubTabItem,
+                    supportSubTab === 'warranty' && [
+                      styles.supportSubTabItemActive,
+                      { backgroundColor: colors.surface },
+                    ],
+                  ]}
+                  onPress={() => setSupportSubTab('warranty')}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons
+                    name="shield-checkmark-outline"
+                    size={15}
+                    color={supportSubTab === 'warranty' ? COLORS.primary : colors.textSecondary}
+                  />
+                  <Text
+                    style={[
+                      styles.supportSubTabText,
+                      { color: supportSubTab === 'warranty' ? COLORS.primary : colors.textSecondary },
+                    ]}
+                  >
+                    Warranty & Help
+                  </Text>
+                </TouchableOpacity>
               </View>
+
+              {/* SUB-TAB 1: DATASHEET & MANUALS */}
+              {supportSubTab === 'manuals' && (
+                <View style={{ gap: SPACING.md }}>
+                  {/* Official Manufacturer PDF Files */}
+                  <View style={[styles.cardSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <View style={styles.sectionHeaderRow}>
+                      <Ionicons name="document-attach-outline" size={18} color={COLORS.primary} />
+                      <Text style={[styles.sectionHeading, { color: colors.text }]}>
+                        Manufacturer Technical Documents
+                      </Text>
+                    </View>
+                    <Text style={[styles.supportIntroText, { color: colors.textSecondary }]}>
+                      Official PDF engineering sheets and user operation guides for {product.brand} {product.title}.
+                    </Text>
+
+                    {product.documents && product.documents.length > 0 ? (
+                      <View style={styles.docListContainer}>
+                        {product.documents.map((doc, docIdx) => (
+                          <View
+                            key={docIdx}
+                            style={[
+                              styles.docCardExpanded,
+                              { backgroundColor: colors.surfaceVariant, borderColor: colors.border },
+                            ]}
+                          >
+                            <View style={styles.docCardTopRow}>
+                              <View
+                                style={[
+                                  styles.docIconBoxLarge,
+                                  {
+                                    backgroundColor:
+                                      doc.type === 'manual' ? '#DCFCE7' : '#DBEAFE',
+                                  },
+                                ]}
+                              >
+                                <Ionicons
+                                  name={doc.type === 'manual' ? 'book' : 'document-text'}
+                                  size={24}
+                                  color={doc.type === 'manual' ? '#15803D' : '#1D4ED8'}
+                                />
+                              </View>
+                              <View style={styles.docInfoExpanded}>
+                                <Text style={[styles.docTitleExpanded, { color: colors.text }]}>
+                                  {doc.title}
+                                </Text>
+                                <Text style={[styles.docMetaExpanded, { color: colors.textSecondary }]}>
+                                  {doc.type === 'manual'
+                                    ? 'Official User & Installation Manual'
+                                    : 'Technical Specification & Wiring Data'}
+                                </Text>
+                                <View style={styles.docTagsRow}>
+                                  <View style={[styles.docFormatTag, { backgroundColor: colors.border }]}>
+                                    <Text style={[styles.docFormatTagText, { color: colors.text }]}>PDF</Text>
+                                  </View>
+                                  {doc.filesize ? (
+                                    <View style={[styles.docFormatTag, { backgroundColor: colors.border }]}>
+                                      <Text style={[styles.docFormatTagText, { color: colors.textSecondary }]}>
+                                        {doc.filesize}
+                                      </Text>
+                                    </View>
+                                  ) : null}
+                                  <View style={styles.docVerifiedTag}>
+                                    <Ionicons name="checkmark-circle" size={11} color="#15803D" />
+                                    <Text style={styles.docVerifiedTagText}>Verified Authentic</Text>
+                                  </View>
+                                </View>
+                              </View>
+                            </View>
+
+                            {/* Action Buttons */}
+                            <View style={styles.docActionButtonsExpanded}>
+                              <TouchableOpacity
+                                style={styles.docOpenBtnExpanded}
+                                onPress={() => handleOpenPdf(doc)}
+                                activeOpacity={0.85}
+                              >
+                                <Ionicons name="eye-outline" size={16} color="#FFFFFF" />
+                                <Text style={styles.docOpenBtnExpandedText}>Open PDF Natively</Text>
+                              </TouchableOpacity>
+
+                              <TouchableOpacity
+                                style={[
+                                  styles.docShareBtnExpanded,
+                                  { borderColor: colors.border, backgroundColor: colors.surface },
+                                ]}
+                                onPress={() => handleSharePdf(doc)}
+                                activeOpacity={0.8}
+                              >
+                                <Ionicons name="share-social-outline" size={16} color={colors.text} />
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <View style={[styles.noDocCard, { backgroundColor: colors.surfaceVariant }]}>
+                        <Ionicons name="document-text-outline" size={32} color={colors.textSecondary} />
+                        <Text style={[styles.noDocTitle, { color: colors.text }]}>Digital PDF Available on Request</Text>
+                        <Text style={[styles.noDocText, { color: colors.textSecondary }]}>
+                          Radical Engineering archives full schematics and user manuals for {product.brand}. Reach out to our technical desk to receive the PDF copy via WhatsApp or email.
+                        </Text>
+                        <TouchableOpacity style={styles.requestManualBtn} onPress={handleRequestManual}>
+                          <Ionicons name="logo-whatsapp" size={16} color="#15803D" />
+                          <Text style={styles.requestManualText}>Request PDF from Engineering Desk</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Native Reader Feature Note */}
+                  <View
+                    style={[
+                      styles.pdfFeatureNotice,
+                      {
+                        backgroundColor: isDark ? '#1E293B' : '#EFF6FF',
+                        borderColor: isDark ? '#334155' : '#BFDBFE',
+                      },
+                    ]}
+                  >
+                    <Ionicons name="phone-portrait-outline" size={20} color="#1D4ED8" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.pdfFeatureTitle, { color: isDark ? '#93C5FD' : '#1E3A8A' }]}>
+                        Native In-App PDF Viewer
+                      </Text>
+                      <Text style={[styles.pdfFeatureSub, { color: isDark ? '#CBD5E1' : '#3B82F6' }]}>
+                        Documents open natively in an in-app reader with high-clarity vector rendering, pinch-to-zoom, page navigation, text search, and device print support.
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Custom Sizing or Schematics Request */}
+                  <View style={[styles.cardSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <View style={styles.sectionHeaderRow}>
+                      <Ionicons name="construct-outline" size={18} color={COLORS.primary} />
+                      <Text style={[styles.sectionHeading, { color: colors.text }]}>Custom Schematics & Firmware</Text>
+                    </View>
+                    <Text style={[styles.supportIntroText, { color: colors.textSecondary }]}>
+                      Need single-line wiring diagrams (SLD), inverter firmware updates, or solar array sizing charts?
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.whatsAppDocRequestBtn}
+                      onPress={handleRequestManual}
+                      activeOpacity={0.85}
+                    >
+                      <Ionicons name="logo-whatsapp" size={16} color="#FFFFFF" />
+                      <Text style={styles.whatsAppDocRequestBtnText}>Request Schematics on WhatsApp</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              {/* SUB-TAB 2: WARRANTY & SERVICE */}
+              {supportSubTab === 'warranty' && (
+                <View style={{ gap: SPACING.md }}>
+                  <View style={[styles.cardSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <View style={styles.sectionHeaderRow}>
+                      <Ionicons name="shield-outline" size={18} color={COLORS.primary} />
+                      <Text style={[styles.sectionHeading, { color: colors.text }]}>Warranty & Official Guarantee</Text>
+                    </View>
+                    <View style={styles.warrantyHighlightRow}>
+                      <View style={styles.warrantyHighlightPill}>
+                        <Ionicons name="shield-checkmark" size={16} color={COLORS.success} />
+                        <Text style={styles.warrantyHighlightPillText}>{product.warranty}</Text>
+                      </View>
+                      <Text style={[styles.warrantyStatusNote, { color: colors.textSecondary }]}>
+                        Manufacturer Backed Coverage
+                      </Text>
+                    </View>
+                    <Text style={[styles.descriptionBody, { color: colors.text }]}>
+                      Radical Engineering is an authorized engineering provider. Every unit includes full replacement or repair coverage per manufacturer policy, alongside certified engineer diagnostics across Kishoreganj and nationwide.
+                    </Text>
+
+                    <View style={styles.supportContactBox}>
+                      <Text style={[styles.supportContactTitle, { color: colors.text }]}>Need Help or Sizing Confirmation?</Text>
+                      <Text style={[styles.supportContactSub, { color: colors.textSecondary }]}>
+                        Speak directly with a certified electrical and solar engineer before finalizing your equipment order.
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.callHotlineButton}
+                        onPress={handleCallHotline}
+                        activeOpacity={0.85}
+                      >
+                        <Ionicons name="call" size={16} color="#FFFFFF" />
+                        <Text style={styles.callHotlineText}>Call Hotline: {APP_CONFIG.hotline1}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              )}
             </View>
           )}
 
           {/* Bottom Space for Floating Action Bar */}
-          <View style={{ height: 110 }} />
+          <View style={{ height: 100 + bottomPadding }} />
         </View>
       </ScrollView>
 
@@ -457,6 +837,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
             backgroundColor: colors.surface,
             borderTopColor: colors.border,
             shadowColor: colors.cardShadow,
+            paddingBottom: bottomPadding + 6,
           },
         ]}
       >
@@ -948,5 +1329,275 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '800',
+  },
+  docListContainer: {
+    marginTop: 6,
+    gap: 10,
+  },
+  docCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.sm + 4,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    gap: 10,
+  },
+  docIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: RADIUS.sm,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  docInfo: {
+    flex: 1,
+  },
+  docTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  docMeta: {
+    fontSize: 11,
+  },
+  docActionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  docOpenBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.sm,
+    gap: 4,
+  },
+  docOpenBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  docShareBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: RADIUS.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noDocCard: {
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+    gap: 8,
+  },
+  noDocText: {
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  requestManualBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    backgroundColor: '#DCFCE7',
+  },
+  requestManualText: {
+    color: '#15803D',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  supportSubTabBar: {
+    flexDirection: 'row',
+    borderRadius: RADIUS.md,
+    padding: 4,
+    marginBottom: SPACING.md,
+    gap: 4,
+  },
+  supportSubTabItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    borderRadius: RADIUS.sm + 2,
+    gap: 6,
+  },
+  supportSubTabItemActive: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  supportSubTabText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  supportDocCountBadge: {
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.full,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    marginLeft: 2,
+  },
+  supportDocCountBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  supportIntroText: {
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: SPACING.sm,
+  },
+  docCardExpanded: {
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    padding: SPACING.md,
+    gap: 12,
+  },
+  docCardTopRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  docIconBoxLarge: {
+    width: 48,
+    height: 48,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  docInfoExpanded: {
+    flex: 1,
+  },
+  docTitleExpanded: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  docMetaExpanded: {
+    fontSize: 12,
+    marginBottom: 6,
+  },
+  docTagsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  docFormatTag: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  docFormatTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  docVerifiedTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  docVerifiedTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#15803D',
+  },
+  docActionButtonsExpanded: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  docOpenBtnExpanded: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    borderRadius: RADIUS.sm,
+    paddingVertical: 9,
+    gap: 6,
+  },
+  docOpenBtnExpandedText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  docShareBtnExpanded: {
+    width: 40,
+    height: 38,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noDocTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  pdfFeatureNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+  },
+  pdfFeatureTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  pdfFeatureSub: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  whatsAppDocRequestBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#16A34A',
+    borderRadius: RADIUS.md,
+    paddingVertical: 10,
+    gap: 8,
+    marginTop: SPACING.xs,
+  },
+  whatsAppDocRequestBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  warrantyHighlightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: SPACING.sm,
+  },
+  warrantyHighlightPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+  },
+  warrantyHighlightPillText: {
+    color: '#15803D',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  warrantyStatusNote: {
+    fontSize: 12,
   },
 });

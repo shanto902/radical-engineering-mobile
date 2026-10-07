@@ -1,3 +1,12 @@
+export interface ProductDoc {
+  id: string;
+  title: string;
+  filename: string;
+  type: 'datasheet' | 'manual' | 'pdf' | 'document';
+  url: string;
+  filesize?: string;
+}
+
 export interface Product {
   id: string;
   title: string;
@@ -17,6 +26,7 @@ export interface Product {
   voltage?: string;
   warranty: string;
   description: string;
+  rawDescription?: string;
   shortDescription?: string;
   subCategory?: string;
   sku?: string;
@@ -25,6 +35,9 @@ export interface Product {
   features: string[];
   specs: Record<string, string>;
   isFeatured?: boolean;
+  datasheet?: ProductDoc;
+  userManual?: ProductDoc;
+  documents?: ProductDoc[];
 }
 
 export interface Category {
@@ -43,12 +56,16 @@ export interface Project {
   slug: string;
   summary: string;
   description: string;
+  body?: string;
+  shortDescription?: string;
   category: string;
   date: string;
   client?: string;
   location: string;
   capacity: string;
   image: string;
+  images?: string[];
+  videos?: { link: string }[];
   highlights: string[];
 }
 
@@ -61,9 +78,12 @@ export interface ELearningArticle {
   publishedDate: string;
   excerpt: string;
   content: string[];
+  bodyHtml?: string;
   tags: string[];
   author: string;
   image: string;
+  downloadUrl?: string;
+  downloadFilename?: string;
 }
 
 export interface TrackingStep {

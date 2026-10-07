@@ -7,15 +7,22 @@ import { SystemBuilderScreen } from '../screens/SystemBuilderScreen';
 import { ProjectsScreen } from '../screens/ProjectsScreen';
 import { ContactScreen } from '../screens/ContactScreen';
 import { useTheme } from '../context/ThemeContext';
+import { Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/theme';
 
 const Tab = createBottomTabNavigator();
 
 export const BottomTabs: React.FC = () => {
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  const safeBottom = Math.max(insets.bottom, Platform.OS === 'android' ? 16 : 8);
+  const tabHeight = 60 + safeBottom;
 
   return (
     <Tab.Navigator
+      safeAreaInsets={{ bottom: safeBottom }}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: COLORS.primary,
@@ -23,8 +30,8 @@ export const BottomTabs: React.FC = () => {
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
-          height: 60,
-          paddingBottom: 8,
+          height: tabHeight,
+          paddingBottom: safeBottom + 4,
           paddingTop: 6,
         },
         tabBarLabelStyle: {

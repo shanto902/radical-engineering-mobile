@@ -29,7 +29,7 @@ const AUTHORIZED_BRANDS = [
   'Growatt',
   'Solis',
   'Longi',
-  'Volvo (Panna Group)',
+  'Volvo Battery',
   'Trina Solar',
   'JA Solar',
   'Huawei',
@@ -82,23 +82,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
       >
-        {/* Live Weather / Solar Irradiance Widget */}
-        <View style={[styles.solarStatusStrip, { backgroundColor: isDark ? '#1E293B' : '#FFF7ED', borderColor: '#FED7AA' }]}>
-          <View style={styles.solarStatusLeft}>
-            <Ionicons name="sunny" size={18} color={COLORS.primary} />
-            <Text style={styles.solarStatusText}>
-              <Text style={{ fontWeight: '800' }}>Kishoreganj Solar Index: </Text>
-              4.8 kWh/m² peak sun • Ideal PV yield
-            </Text>
-          </View>
-          <View style={styles.liveTag}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveTagText}>LIVE</Text>
-          </View>
-        </View>
-
         {/* Hero Banner Carousel */}
         <BannerSlider
           onBannerPress={(targetScreen) => {
@@ -114,7 +99,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           </View>
           <View style={styles.valueDivider} />
           <View style={styles.valueItem}>
-            <Ionicons name="ribbon" size={16} color={COLORS.primary} />
+            <Ionicons name="ribbon" size={16} color={colors.primary} />
             <Text style={[styles.valueText, { color: colors.text }]}>Tier-1 Brands</Text>
           </View>
           <View style={styles.valueDivider} />
@@ -130,7 +115,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         {/* Core Engineering Tools */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <View>
+            <View style={styles.sectionHeaderLeft}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Smart Engineering Calculators</Text>
               <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
                 Interactive tools to calculate capacity & estimate bill savings
@@ -142,13 +127,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             title="Solar Roof Planner & ROI"
             subtitle="Calculate system capacity, required panels, monthly bill savings & payback period in BDT."
             icon="calculator-outline"
-            color="#EA580C"
+            color={colors.primary}
             badge="FREE SURVEY"
             onPress={() => navigation.navigate('RoofPlanner')}
           />
 
           <QuickActionCard
-            title="Solar IPS & Battery Sizing Builder"
+            title="Solar IPS & Battery Builder"
             subtitle="Select fans, lights & appliances to size your required inverter VA and battery bank."
             icon="hardware-chip-outline"
             color="#0284C7"
@@ -180,7 +165,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                   { backgroundColor: colors.surface, borderColor: colors.border },
                 ]}
               >
-                <Ionicons name="checkmark-circle" size={14} color={COLORS.primary} />
+                <Ionicons name="checkmark-circle" size={14} color={colors.primary} />
                 <Text style={[styles.brandChipText, { color: colors.text }]}>{brandName}</Text>
               </View>
             ))}
@@ -190,14 +175,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         {/* Popular Categories */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <View>
+            <View style={styles.sectionHeaderLeft}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Product Categories</Text>
-              <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+              <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
                 Browse certified solar PV, inverters & battery backup equipment
               </Text>
             </View>
-            <TouchableOpacity onPress={() => navigation.navigate('Catalog')}>
-              <Text style={styles.viewAllText}>View All</Text>
+            <TouchableOpacity
+              style={styles.viewAllBtn}
+              onPress={() => navigation.navigate('Catalog')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={[styles.viewAllText, { color: colors.primary }]}>View All</Text>
             </TouchableOpacity>
           </View>
 
@@ -212,8 +201,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                   { backgroundColor: colors.surface, borderColor: colors.border },
                 ]}
               >
-                <View style={[styles.categoryIconCircle, { backgroundColor: COLORS.primaryLight }]}>
-                  <Ionicons name={cat.icon as any} size={22} color={COLORS.primary} />
+                <View style={[styles.categoryIconCircle, { backgroundColor: isDark ? 'rgba(252, 185, 116, 0.12)' : '#F5EBE6' }]}>
+                  <Ionicons name={cat.icon as any} size={22} color={colors.primary} />
                 </View>
                 <Text style={[styles.categoryName, { color: colors.text }]} numberOfLines={2}>
                   {cat.name}
@@ -229,14 +218,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         {/* Featured Products with Category Tabs */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <View>
+            <View style={styles.sectionHeaderLeft}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Featured Equipment</Text>
-              <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+              <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
                 Top rated solar panels, inverters & tubular batteries
               </Text>
             </View>
-            <TouchableOpacity onPress={() => navigation.navigate('Catalog')}>
-              <Text style={styles.viewAllText}>See All</Text>
+            <TouchableOpacity
+              style={styles.viewAllBtn}
+              onPress={() => navigation.navigate('Catalog')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={[styles.viewAllText, { color: colors.primary }]}>See All</Text>
             </TouchableOpacity>
           </View>
 
@@ -254,15 +247,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 style={[
                   styles.filterPill,
                   {
-                    backgroundColor: selectedHomeCat === f.id ? COLORS.primary : colors.surface,
-                    borderColor: selectedHomeCat === f.id ? COLORS.primary : colors.border,
+                    backgroundColor: selectedHomeCat === f.id ? colors.primary : colors.surface,
+                    borderColor: selectedHomeCat === f.id ? colors.primary : colors.border,
                   },
                 ]}
               >
                 <Text
                   style={[
                     styles.filterPillText,
-                    { color: selectedHomeCat === f.id ? '#FFFFFF' : colors.text },
+                    { color: selectedHomeCat === f.id ? (isDark ? '#260B00' : '#FFFFFF') : colors.text },
                   ]}
                 >
                   {f.label}
@@ -304,14 +297,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         {/* Recent Installation Projects */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <View>
+            <View style={styles.sectionHeaderLeft}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Field Installations</Text>
-              <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+              <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
                 Verified engineering deployments across Bangladesh
               </Text>
             </View>
-            <TouchableOpacity onPress={() => navigation.navigate('Projects')}>
-              <Text style={styles.viewAllText}>View All</Text>
+            <TouchableOpacity
+              style={styles.viewAllBtn}
+              onPress={() => navigation.navigate('Projects')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={[styles.viewAllText, { color: colors.primary }]}>View All</Text>
             </TouchableOpacity>
           </View>
 
@@ -328,8 +325,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               <Image source={{ uri: project.image }} style={styles.projectImage} resizeMode="cover" />
               <View style={styles.projectContent}>
                 <View style={styles.projectHeaderRow}>
-                  <View style={styles.capacityBadge}>
-                    <Text style={styles.capacityText}>{project.capacity}</Text>
+                  <View style={[styles.capacityBadge, { backgroundColor: isDark ? 'rgba(252, 185, 116, 0.15)' : '#F5EBE6' }]}>
+                    <Text style={[styles.capacityText, { color: colors.primary }]}>{project.capacity}</Text>
                   </View>
                   <Text style={[styles.projectDate, { color: colors.textMuted }]}>{project.date}</Text>
                 </View>
@@ -339,7 +336,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
                 </Text>
 
                 <View style={styles.locationRow}>
-                  <Ionicons name="location-outline" size={13} color={COLORS.primary} />
+                  <Ionicons name="location-outline" size={13} color={colors.primary} />
                   <Text style={[styles.locationText, { color: colors.textSecondary }]}>
                     {project.location}
                   </Text>
@@ -352,8 +349,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         {/* Company Profile Footer */}
         <View style={[styles.footerContainer, { backgroundColor: colors.surfaceVariant }]}>
           <View style={styles.footerBrandRow}>
-            <View style={styles.footerLogoBadge}>
-              <Ionicons name="sunny" size={24} color="#FFFFFF" />
+            <View style={[styles.footerLogoBadge, { backgroundColor: colors.primary }]}>
+              <Ionicons name="sunny" size={24} color={isDark ? '#260B00' : '#FFFFFF'} />
             </View>
             <View>
               <Text style={[styles.footerTitle, { color: colors.text }]}>{APP_CONFIG.companyName}</Text>
@@ -369,15 +366,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 
           <View style={styles.footerLinksRow}>
             <TouchableOpacity onPress={() => Linking.openURL(APP_CONFIG.website)}>
-              <Text style={styles.footerLink}>Website</Text>
+              <Text style={[styles.footerLink, { color: colors.primary }]}>Website</Text>
             </TouchableOpacity>
             <Text style={{ color: colors.textMuted }}>•</Text>
             <TouchableOpacity onPress={() => Linking.openURL(APP_CONFIG.facebookUrl)}>
-              <Text style={styles.footerLink}>Facebook</Text>
+              <Text style={[styles.footerLink, { color: colors.primary }]}>Facebook</Text>
             </TouchableOpacity>
             <Text style={{ color: colors.textMuted }}>•</Text>
             <TouchableOpacity onPress={() => Linking.openURL(APP_CONFIG.youtubeUrl)}>
-              <Text style={styles.footerLink}>YouTube</Text>
+              <Text style={[styles.footerLink, { color: colors.primary }]}>YouTube</Text>
             </TouchableOpacity>
           </View>
 
@@ -395,47 +392,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  solarStatusStrip: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginHorizontal: SPACING.md,
-    marginTop: SPACING.sm,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-  },
-  solarStatusLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flex: 1,
-  },
-  solarStatusText: {
-    fontSize: 11,
-    color: '#9A3412',
-  },
-  liveTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#DCFCE7',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    gap: 4,
-  },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: COLORS.success,
-  },
-  liveTagText: {
-    color: '#166534',
-    fontSize: 9,
-    fontWeight: '800',
   },
   valueStrip: {
     flexDirection: 'row',
@@ -466,8 +422,12 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: SPACING.sm + 4,
+  },
+  sectionHeaderLeft: {
+    flex: 1,
+    paddingRight: SPACING.sm,
   },
   sectionTitle: {
     fontSize: 16,
@@ -476,6 +436,11 @@ const styles = StyleSheet.create({
   sectionSubtitle: {
     fontSize: 12,
     marginTop: 1,
+  },
+  viewAllBtn: {
+    paddingLeft: SPACING.xs,
+    paddingVertical: 2,
+    alignSelf: 'flex-start',
   },
   viewAllText: {
     color: COLORS.primary,

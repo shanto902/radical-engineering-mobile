@@ -23,7 +23,7 @@ interface ProjectsScreenProps {
 }
 
 export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ navigation }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [projects, setProjects] = useState<Project[]>([]);
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
 
@@ -86,8 +86,8 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ navigation }) =>
 
               <View style={styles.body}>
                 <View style={styles.metaRow}>
-                  <View style={styles.capacityBadge}>
-                    <Text style={styles.capacityText}>{project.capacity}</Text>
+                  <View style={[styles.capacityBadge, { backgroundColor: isDark ? 'rgba(252, 185, 116, 0.15)' : '#F5EBE6' }]}>
+                    <Text style={[styles.capacityText, { color: colors.primary }]}>{project.capacity}</Text>
                   </View>
                   <Text style={[styles.dateText, { color: colors.textMuted }]}>{project.date}</Text>
                 </View>
@@ -95,7 +95,7 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ navigation }) =>
                 <Text style={[styles.title, { color: colors.text }]}>{project.title}</Text>
 
                 <View style={styles.locationRow}>
-                  <Ionicons name="location" size={14} color={COLORS.primary} />
+                  <Ionicons name="location" size={14} color={colors.primary} />
                   <Text style={[styles.locationText, { color: colors.textSecondary }]}>
                     {project.location}
                   </Text>

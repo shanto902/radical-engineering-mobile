@@ -1,16 +1,17 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking, Platform, StatusBar as RNStatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, StatusBar as RNStatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useCart } from '../context/CartContext';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
-import { APP_CONFIG } from '../constants/config';
+import { HeaderLogo } from './HeaderLogo';
 
 interface HeaderProps {
   title?: string;
   subtitle?: string;
   showBack?: boolean;
+  showLogo?: boolean;
   onBack?: () => void;
   onOpenCart?: () => void;
   onSearchPress?: () => void;
@@ -18,8 +19,8 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   title,
-  subtitle,
   showBack = false,
+  showLogo = false,
   onBack,
   onOpenCart,
   onSearchPress,
@@ -28,13 +29,11 @@ export const Header: React.FC<HeaderProps> = ({
   const { totalItemsCount } = useCart();
   const insets = useSafeAreaInsets();
 
-  const handleCall = () => {
-    Linking.openURL(`tel:${APP_CONFIG.hotline1Raw}`);
-  };
-
   const androidStatusBar = RNStatusBar.currentHeight ?? 24;
   const topInset = Math.max(insets.top, Platform.OS === 'android' ? androidStatusBar : 0);
-  const safeTopPadding = topInset + 8;
+  const safeTopPadding = topInset + 6;
+
+  const shouldRenderLogo = showLogo || (!showBack && !title);
 
   return (
     <View
@@ -49,53 +48,59 @@ export const Header: React.FC<HeaderProps> = ({
     >
       <View style={styles.leftContainer}>
         {showBack ? (
-          <TouchableOpacity onPress={onBack} style={styles.iconButton}>
+          <TouchableOpacity
+            onPress={onBack}
+            style={styles.iconButton}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Go back"
+          >
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
-        ) : (
-          <View style={styles.brandRow}>
-            <View style={styles.logoBadge}>
-              <Ionicons name="sunny" size={20} color="#FFFFFF" />
-            </View>
-            <View>
-              <Text style={[styles.brandTitle, { color: colors.text }]}>RADICAL</Text>
-              <Text style={styles.brandSubtitle}>ENGINEERING</Text>
-            </View>
-          </View>
-        )}
+        ) : null}
 
-        {title && (
+        {shouldRenderLogo ? (
+          <View style={styles.logoWrapper}>
+            <HeaderLogo isDark={isDark} width={162} height={28} />
+          </View>
+        ) : title ? (
           <View style={styles.titleWrapper}>
             <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
               {title}
             </Text>
-            {subtitle && (
-              <Text style={[styles.subtitle, { color: colors.textSecondary }]} numberOfLines={1}>
-                {subtitle}
-              </Text>
-            )}
           </View>
-        )}
+        ) : null}
       </View>
 
       <View style={styles.rightContainer}>
-        <TouchableOpacity onPress={handleCall} style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant }]}>
-          <Ionicons name="call-outline" size={18} color={COLORS.primary} />
-        </TouchableOpacity>
-
         {onSearchPress && (
-          <TouchableOpacity onPress={onSearchPress} style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant }]}>
-            <Ionicons name="search-outline" size={18} color={colors.text} />
+          <TouchableOpacity
+            onPress={onSearchPress}
+            style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant }]}
+            accessibilityLabel="Search products"
+          >
+            <Ionicons name="search-outline" size={17} color={colors.text} />
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity onPress={toggleTheme} style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant }]}>
-          <Ionicons name={isDark ? 'sunny-outline' : 'moon-outline'} size={18} color={colors.text} />
+        <TouchableOpacity
+          onPress={toggleTheme}
+          style={[styles.actionBtn, { backgroundColor: colors.surfaceVariant }]}
+          accessibilityLabel="Toggle theme"
+        >
+          <Ionicons name={isDark ? 'sunny-outline' : 'moon-outline'} size={17} color={colors.text} />
         </TouchableOpacity>
 
         {onOpenCart && (
-          <TouchableOpacity onPress={onOpenCart} style={[styles.actionBtn, styles.cartBtn]}>
-            <Ionicons name="cart-outline" size={20} color="#FFFFFF" />
+          <TouchableOpacity
+            onPress={onOpenCart}
+            style={[
+              styles.actionBtn,
+              styles.cartBtn,
+              { backgroundColor: colors.primary },
+            ]}
+            accessibilityLabel="View shopping cart"
+          >
+            <Ionicons name="cart-outline" size={19} color={isDark ? '#260B00' : '#FFFFFF'} />
             {totalItemsCount > 0 && (
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>{totalItemsCount > 99 ? '99+' : totalItemsCount}</Text>
@@ -114,49 +119,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm + 4,
+    paddingBottom: SPACING.sm + 4,
     borderBottomWidth: 1,
   },
   leftContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-  },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  logoBadge: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginRight: SPACING.sm,
   },
-  brandTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 1.2,
-  },
-  brandSubtitle: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: COLORS.primary,
-    letterSpacing: 2,
-    marginTop: -2,
+  logoWrapper: {
+    borderRadius: RADIUS.sm,
+    overflow: 'hidden',
   },
   titleWrapper: {
-    marginLeft: SPACING.sm,
     flex: 1,
+    justifyContent: 'center',
   },
   title: {
     fontSize: 16,
     fontWeight: '700',
-  },
-  subtitle: {
-    fontSize: 11,
   },
   rightContainer: {
     flexDirection: 'row',
@@ -165,7 +147,7 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     padding: SPACING.xs,
-    marginRight: SPACING.xs,
+    marginRight: SPACING.xs + 2,
   },
   actionBtn: {
     width: 36,
@@ -175,7 +157,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cartBtn: {
-    backgroundColor: COLORS.primary,
     position: 'relative',
   },
   badge: {
@@ -198,4 +179,3 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
-

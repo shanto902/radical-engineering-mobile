@@ -21,7 +21,7 @@ interface ContactScreenProps {
 }
 
 export const ContactScreen: React.FC<ContactScreenProps> = ({ navigation }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -89,8 +89,8 @@ export const ContactScreen: React.FC<ContactScreenProps> = ({ navigation }) => {
         {/* Company Header Card */}
         <View style={[styles.profileCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.brandRow}>
-            <View style={styles.logoBadge}>
-              <Ionicons name="sunny" size={26} color="#FFFFFF" />
+            <View style={[styles.logoBadge, { backgroundColor: colors.primary }]}>
+              <Ionicons name="sunny" size={26} color={isDark ? '#260B00' : '#FFFFFF'} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.companyName, { color: colors.text }]}>{APP_CONFIG.companyName}</Text>
@@ -103,11 +103,11 @@ export const ContactScreen: React.FC<ContactScreenProps> = ({ navigation }) => {
           {/* Quick Contact Buttons */}
           <View style={styles.contactActionRow}>
             <TouchableOpacity
-              style={[styles.quickActionBtn, { borderColor: COLORS.primary }]}
+              style={[styles.quickActionBtn, { borderColor: colors.primary }]}
               onPress={() => handleCall(APP_CONFIG.hotline1Raw)}
             >
-              <Ionicons name="call" size={18} color={COLORS.primary} />
-              <Text style={[styles.quickActionText, { color: COLORS.primary }]}>Call Desk</Text>
+              <Ionicons name="call" size={18} color={colors.primary} />
+              <Text style={[styles.quickActionText, { color: colors.primary }]}>Call Desk</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -133,7 +133,7 @@ export const ContactScreen: React.FC<ContactScreenProps> = ({ navigation }) => {
           <Text style={[styles.cardTitle, { color: colors.text }]}>Corporate & Engineering Office</Text>
 
           <View style={styles.infoRow}>
-            <Ionicons name="location-outline" size={20} color={COLORS.primary} style={styles.infoIcon} />
+            <Ionicons name="location-outline" size={20} color={colors.primary} style={styles.infoIcon} />
             <View style={{ flex: 1 }}>
               <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Headquarters Address</Text>
               <Text style={[styles.infoVal, { color: colors.text }]}>{APP_CONFIG.address}</Text>
@@ -141,7 +141,7 @@ export const ContactScreen: React.FC<ContactScreenProps> = ({ navigation }) => {
           </View>
 
           <View style={styles.infoRow}>
-            <Ionicons name="call-outline" size={20} color={COLORS.primary} style={styles.infoIcon} />
+            <Ionicons name="call-outline" size={20} color={colors.primary} style={styles.infoIcon} />
             <View style={{ flex: 1 }}>
               <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Direct Hotlines</Text>
               <Text style={[styles.infoVal, { color: colors.text }]}>
@@ -151,7 +151,7 @@ export const ContactScreen: React.FC<ContactScreenProps> = ({ navigation }) => {
           </View>
 
           <View style={styles.infoRow}>
-            <Ionicons name="mail-outline" size={20} color={COLORS.primary} style={styles.infoIcon} />
+            <Ionicons name="mail-outline" size={20} color={colors.primary} style={styles.infoIcon} />
             <View style={{ flex: 1 }}>
               <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Official Email</Text>
               <Text style={[styles.infoVal, { color: colors.text }]}>{APP_CONFIG.email}</Text>
@@ -159,7 +159,7 @@ export const ContactScreen: React.FC<ContactScreenProps> = ({ navigation }) => {
           </View>
 
           <View style={styles.infoRow}>
-            <Ionicons name="time-outline" size={20} color={COLORS.primary} style={styles.infoIcon} />
+            <Ionicons name="time-outline" size={20} color={colors.primary} style={styles.infoIcon} />
             <View style={{ flex: 1 }}>
               <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Operating Hours</Text>
               <Text style={[styles.infoVal, { color: colors.text }]}>{APP_CONFIG.operatingHours}</Text>
@@ -207,15 +207,15 @@ export const ContactScreen: React.FC<ContactScreenProps> = ({ navigation }) => {
                   style={[
                     styles.servicePill,
                     {
-                      backgroundColor: serviceType === svc ? COLORS.primary : colors.surfaceVariant,
-                      borderColor: serviceType === svc ? COLORS.primary : colors.border,
+                      backgroundColor: serviceType === svc ? colors.primary : colors.surfaceVariant,
+                      borderColor: serviceType === svc ? colors.primary : colors.border,
                     },
                   ]}
                 >
                   <Text
                     style={[
                       styles.servicePillText,
-                      { color: serviceType === svc ? '#FFFFFF' : colors.text },
+                      { color: serviceType === svc ? (isDark ? '#260B00' : '#FFFFFF') : colors.text },
                     ]}
                   >
                     {svc}
@@ -239,12 +239,12 @@ export const ContactScreen: React.FC<ContactScreenProps> = ({ navigation }) => {
           </View>
 
           <TouchableOpacity
-            style={styles.submitBtn}
+            style={[styles.submitBtn, { backgroundColor: colors.primary }]}
             onPress={handleSubmitInquiry}
             disabled={isSubmitting}
             activeOpacity={0.85}
           >
-            <Text style={styles.submitBtnText}>
+            <Text style={[styles.submitBtnText, { color: isDark ? '#260B00' : '#FFFFFF' }]}>
               {isSubmitting ? 'Submitting...' : 'Submit Inquiry'}
             </Text>
           </TouchableOpacity>

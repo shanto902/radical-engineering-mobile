@@ -3,6 +3,8 @@ node_modules/
 dist/
 web-build/
 *.jks
+*.keystore
+*.pem
 *.p8
 *.p12
 *.key

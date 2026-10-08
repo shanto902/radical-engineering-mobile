@@ -2,26 +2,34 @@
   "expo": {
     "name": "Radical Engineering",
     "slug": "radical-engineering-mobile",
-    "version": "1.0.0",
+    "version": "3.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#1c1917"
-    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#3c1100"
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.radicalengineering.mobile"
+      "bundleIdentifier": "com.radicalengineering.bd"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1c1917"
+        "backgroundColor": "#3c1100"
       },
-      "package": "com.radicalengineering.mobile"
+      "package": "com.radicalengineering.bd",
+      "versionCode": 8,
+      "permissions": [
+        "INTERNET"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -33,8 +41,10 @@
       "hotline1": "+880 1760195100",
       "hotline2": "+880 1787224460",
       "email": "radicalengineeringbd@gmail.com",
-      "address": "1400, Hazi Hasen Ali Market, Station Road, Kishoreganj, Bangladesh"
+      "address": "1400, Hazi Hasen Ali Market, Station Road, Kishoreganj, Bangladesh",
+      "eas": {
+        "projectId": "6a34fe6c-07ec-44e5-810a-19c594b99c2e"
+      }
     }
   }
 }
-

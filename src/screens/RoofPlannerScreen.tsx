@@ -21,7 +21,7 @@ interface RoofPlannerScreenProps {
 }
 
 export const RoofPlannerScreen: React.FC<RoofPlannerScreenProps> = ({ navigation }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
   const [roofAreaSqFt, setRoofAreaSqFt] = useState('800');
   const [monthlyBillBDT, setMonthlyBillBDT] = useState('6500');
@@ -98,11 +98,19 @@ export const RoofPlannerScreen: React.FC<RoofPlannerScreenProps> = ({ navigation
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Intro Banner */}
-        <View style={[styles.introCard, { backgroundColor: COLORS.primaryLight, borderColor: '#FDBA74' }]}>
-          <Ionicons name="sunny" size={24} color={COLORS.primary} />
+        <View
+          style={[
+            styles.introCard,
+            {
+              backgroundColor: isDark ? 'rgba(252, 185, 116, 0.12)' : '#F5EBE6',
+              borderColor: isDark ? 'rgba(252, 185, 116, 0.3)' : '#EAD9D0',
+            },
+          ]}
+        >
+          <Ionicons name="sunny" size={24} color={colors.primary} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.introTitle}>Bangladesh Solar Calculator</Text>
-            <Text style={styles.introDesc}>
+            <Text style={[styles.introTitle, { color: colors.primary }]}>Bangladesh Solar Calculator</Text>
+            <Text style={[styles.introDesc, { color: isDark ? colors.textSecondary : '#7C2D12' }]}>
               Tailored to 4.5 peak sun hours, BPDB/DESCO net-metering formulas & Tier-1 panel specs.
             </Text>
           </View>
@@ -139,7 +147,7 @@ export const RoofPlannerScreen: React.FC<RoofPlannerScreenProps> = ({ navigation
               <Text style={[styles.subLabel, { color: colors.textSecondary }]}>DESCO/BREB/NESCO</Text>
             </View>
             <View style={[styles.inputBox, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }]}>
-              <Text style={[styles.unitPrefix, { color: COLORS.primary }]}>{APP_CONFIG.currency}</Text>
+              <Text style={[styles.unitPrefix, { color: colors.primary }]}>{APP_CONFIG.currency}</Text>
               <TextInput
                 keyboardType="numeric"
                 value={monthlyBillBDT}
@@ -163,15 +171,15 @@ export const RoofPlannerScreen: React.FC<RoofPlannerScreenProps> = ({ navigation
                   style={[
                     styles.pill,
                     {
-                      backgroundColor: roofType === type ? COLORS.primary : colors.surfaceVariant,
-                      borderColor: roofType === type ? COLORS.primary : colors.border,
+                      backgroundColor: roofType === type ? colors.primary : colors.surfaceVariant,
+                      borderColor: roofType === type ? colors.primary : colors.border,
                     },
                   ]}
                 >
                   <Text
                     style={[
                       styles.pillText,
-                      { color: roofType === type ? '#FFFFFF' : colors.text },
+                      { color: roofType === type ? (isDark ? '#260B00' : '#FFFFFF') : colors.text },
                     ]}
                   >
                     {type === 'flat_rcc' ? 'Flat Concrete (RCC)' : type === 'tin_shed' ? 'Tin Shed / Industrial' : 'Tilted Slope'}
@@ -214,15 +222,15 @@ export const RoofPlannerScreen: React.FC<RoofPlannerScreenProps> = ({ navigation
         {/* Calculation Result Dashboard */}
         <View style={[styles.resultsDashboard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.dashboardHeader}>
-            <View>
-              <Text style={[styles.dashboardBadge, { color: COLORS.primary }]}>RECOMMENDED SYSTEM</Text>
+            <View style={{ flex: 1, paddingRight: SPACING.xs }}>
+              <Text style={[styles.dashboardBadge, { color: colors.primary }]}>RECOMMENDED SYSTEM</Text>
               <Text style={[styles.dashboardKw, { color: colors.text }]}>
                 {calculations.actualKw} <Text style={{ fontSize: 18, color: colors.textSecondary }}>kWp Capacity</Text>
               </Text>
             </View>
-            <View style={styles.panelCountBadge}>
-              <Text style={styles.panelCountText}>{calculations.panelCount} Panels</Text>
-              <Text style={styles.panelWattText}>{calculations.panelWattage}W Tier-1</Text>
+            <View style={[styles.panelCountBadge, { backgroundColor: isDark ? 'rgba(252, 185, 116, 0.15)' : '#F5EBE6' }]}>
+              <Text style={[styles.panelCountText, { color: colors.primary }]}>{calculations.panelCount} Panels</Text>
+              <Text style={[styles.panelWattText, { color: isDark ? colors.textSecondary : '#260B00' }]}>{calculations.panelWattage}W Tier-1</Text>
             </View>
           </View>
 
@@ -263,11 +271,11 @@ export const RoofPlannerScreen: React.FC<RoofPlannerScreenProps> = ({ navigation
 
           {/* Turnkey Estimated Cost */}
           <View style={[styles.costBox, { backgroundColor: colors.surfaceVariant }]}>
-            <View>
+            <View style={styles.costTextCol}>
               <Text style={[styles.costLabel, { color: colors.textSecondary }]}>Estimated Turnkey Installation Cost</Text>
               <Text style={[styles.costSub, { color: colors.textMuted }]}>Includes panels, inverter, cabling & mounting</Text>
             </View>
-            <Text style={[styles.costRange, { color: COLORS.primary }]}>
+            <Text style={[styles.costRange, { color: colors.primary }]}>
               ৳ {(calculations.estimatedCostMin / 1000).toFixed(0)}k - {(calculations.estimatedCostMax / 1000).toFixed(0)}k
             </Text>
           </View>
@@ -393,6 +401,7 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
+    gap: SPACING.sm,
   },
   dashboardBadge: {
     fontSize: 10,
@@ -410,6 +419,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: RADIUS.md,
     alignItems: 'center',
+    flexShrink: 0,
   },
   panelCountText: {
     color: COLORS.primary,
@@ -452,6 +462,10 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     borderRadius: RADIUS.md,
     marginTop: SPACING.md,
+    gap: SPACING.sm,
+  },
+  costTextCol: {
+    flex: 1,
   },
   costLabel: {
     fontSize: 12,
@@ -462,8 +476,10 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   costRange: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
+    flexShrink: 0,
+    textAlign: 'right',
   },
   ctaButton: {
     flexDirection: 'row',

@@ -25,7 +25,7 @@ export const BottomTabs: React.FC = () => {
       safeAreaInsets={{ bottom: safeBottom }}
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: COLORS.primary,
+        tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textSecondary,
         tabBarStyle: {
           backgroundColor: colors.surface,

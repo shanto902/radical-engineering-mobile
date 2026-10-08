@@ -21,7 +21,7 @@ export const QuickActionCard: React.FC<QuickActionProps> = ({
   badge,
   onPress,
 }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
   return (
     <TouchableOpacity
@@ -45,7 +45,14 @@ export const QuickActionCard: React.FC<QuickActionProps> = ({
           </Text>
           {badge && (
             <View style={[styles.badge, { backgroundColor: color }]}>
-              <Text style={styles.badgeText}>{badge}</Text>
+              <Text
+                style={[
+                  styles.badgeText,
+                  color === colors.primary && { color: isDark ? '#260B00' : '#FFFFFF' },
+                ]}
+              >
+                {badge}
+              </Text>
             </View>
           )}
         </View>
@@ -77,6 +84,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    marginRight: 6,
   },
   titleRow: {
     flexDirection: 'row',
@@ -87,11 +95,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 14,
     fontWeight: '700',
+    flexShrink: 1,
   },
   badge: {
     paddingHorizontal: 6,
-    paddingVertical: 1,
+    paddingVertical: 2,
     borderRadius: RADIUS.sm,
+    flexShrink: 0,
   },
   badgeText: {
     color: '#FFFFFF',

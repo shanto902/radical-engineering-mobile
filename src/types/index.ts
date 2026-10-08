@@ -94,6 +94,24 @@ export interface TrackingStep {
   current: boolean;
 }
 
+export interface TrackedOrderItem {
+  id?: string;
+  productName: string;
+  quantity: number;
+}
+
+export interface TrackedOrder {
+  id: string;
+  orderId: string;
+  customerName: string;
+  phone: string;
+  address: string;
+  status: string; // 'pending' | 'placed' | 'processing' | 'shipped' | 'delivered' | 'cancel'
+  placedAt: string;
+  total: number;
+  items: TrackedOrderItem[];
+}
+
 export interface Order {
   id: string;
   orderNumber: string;

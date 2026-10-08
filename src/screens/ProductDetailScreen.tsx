@@ -54,7 +54,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
   if (loading) {
     return (
       <View style={[styles.centerBox, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
           Loading product specifications...
         </Text>
@@ -103,7 +103,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
     try {
       await WebBrowser.openBrowserAsync(doc.url, {
         presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
-        toolbarColor: COLORS.primary,
+        toolbarColor: colors.primary,
         controlsColor: '#FFFFFF',
         showTitle: true,
         enableDefaultShareMenuItem: true,
@@ -207,8 +207,8 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
         <View style={styles.infoWrapper}>
           {/* Brand & SKU Header */}
           <View style={styles.brandRow}>
-            <View style={styles.brandTagWrapper}>
-              <Text style={styles.brandTagText}>{product.brand}</Text>
+            <View style={[styles.brandTagWrapper, { backgroundColor: isDark ? 'rgba(252, 185, 116, 0.15)' : '#F5EBE6' }]}>
+              <Text style={[styles.brandTagText, { color: colors.primary }]}>{product.brand}</Text>
             </View>
             {product.sku ? (
               <Text style={[styles.skuText, { color: colors.textMuted }]}>
@@ -252,10 +252,10 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
           >
             <View style={styles.priceRowTop}>
               <View>
-                <Text style={styles.priceLeadLabel}>Special Price</Text>
+                <Text style={[styles.priceLeadLabel, { color: colors.textSecondary }]}>Special Price</Text>
                 <View style={styles.priceNumbersRow}>
-                  <Text style={styles.currencySymbol}>{APP_CONFIG.currency}</Text>
-                  <Text style={styles.priceAmount}>
+                  <Text style={[styles.currencySymbol, { color: colors.primary }]}>{APP_CONFIG.currency}</Text>
+                  <Text style={[styles.priceAmount, { color: colors.primary }]}>
                     {product.price.toLocaleString()}
                   </Text>
                 </View>
@@ -290,7 +290,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
                 </Text>
               </View>
               <View style={styles.serviceNoticeItem}>
-                <Ionicons name="construct-outline" size={16} color={COLORS.primary} />
+                <Ionicons name="construct-outline" size={16} color={colors.primary} />
                 <Text style={[styles.serviceNoticeText, { color: colors.textSecondary }]}>
                   Expert Setup
                 </Text>
@@ -327,17 +327,17 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
           <View style={[styles.tabBar, { borderBottomColor: colors.border }]}>
             <TouchableOpacity
               onPress={() => setActiveTab('overview')}
-              style={[styles.tabItem, activeTab === 'overview' && styles.tabItemActive]}
+              style={[styles.tabItem, activeTab === 'overview' && [styles.tabItemActive, { borderBottomColor: colors.primary }]]}
             >
               <Ionicons
                 name="document-text-outline"
                 size={16}
-                color={activeTab === 'overview' ? COLORS.primary : colors.textSecondary}
+                color={activeTab === 'overview' ? colors.primary : colors.textSecondary}
               />
               <Text
                 style={[
                   styles.tabText,
-                  { color: activeTab === 'overview' ? COLORS.primary : colors.textSecondary },
+                  { color: activeTab === 'overview' ? colors.primary : colors.textSecondary },
                   activeTab === 'overview' && styles.tabTextActive,
                 ]}
               >
@@ -347,17 +347,17 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
 
             <TouchableOpacity
               onPress={() => setActiveTab('specs')}
-              style={[styles.tabItem, activeTab === 'specs' && styles.tabItemActive]}
+              style={[styles.tabItem, activeTab === 'specs' && [styles.tabItemActive, { borderBottomColor: colors.primary }]]}
             >
               <Ionicons
                 name="list-outline"
                 size={16}
-                color={activeTab === 'specs' ? COLORS.primary : colors.textSecondary}
+                color={activeTab === 'specs' ? colors.primary : colors.textSecondary}
               />
               <Text
                 style={[
                   styles.tabText,
-                  { color: activeTab === 'specs' ? COLORS.primary : colors.textSecondary },
+                  { color: activeTab === 'specs' ? colors.primary : colors.textSecondary },
                   activeTab === 'specs' && styles.tabTextActive,
                 ]}
               >
@@ -367,17 +367,17 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
 
             <TouchableOpacity
               onPress={() => setActiveTab('support')}
-              style={[styles.tabItem, activeTab === 'support' && styles.tabItemActive]}
+              style={[styles.tabItem, activeTab === 'support' && [styles.tabItemActive, { borderBottomColor: colors.primary }]]}
             >
               <Ionicons
                 name="headset-outline"
                 size={16}
-                color={activeTab === 'support' ? COLORS.primary : colors.textSecondary}
+                color={activeTab === 'support' ? colors.primary : colors.textSecondary}
               />
               <Text
                 style={[
                   styles.tabText,
-                  { color: activeTab === 'support' ? COLORS.primary : colors.textSecondary },
+                  { color: activeTab === 'support' ? colors.primary : colors.textSecondary },
                   activeTab === 'support' && styles.tabTextActive,
                 ]}
               >
@@ -392,7 +392,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
               {/* Description Section with RichText */}
               <View style={[styles.cardSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <View style={styles.sectionHeaderRow}>
-                  <Ionicons name="reader-outline" size={18} color={COLORS.primary} />
+                  <Ionicons name="reader-outline" size={18} color={colors.primary} />
                   <Text style={[styles.sectionHeading, { color: colors.text }]}>Product Overview</Text>
                 </View>
                 <RichText
@@ -404,7 +404,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
               {/* Official Technical Documents & Manuals (PDF) */}
               <View style={[styles.cardSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <View style={styles.sectionHeaderRow}>
-                  <Ionicons name="document-attach-outline" size={18} color={COLORS.primary} />
+                  <Ionicons name="document-attach-outline" size={18} color={colors.primary} />
                   <Text style={[styles.sectionHeading, { color: colors.text }]}>Documents & Manuals (PDF)</Text>
                 </View>
 
@@ -433,12 +433,12 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
                         </View>
                         <View style={styles.docActionButtons}>
                           <TouchableOpacity
-                            style={styles.docOpenBtn}
+                            style={[styles.docOpenBtn, { backgroundColor: colors.primary }]}
                             onPress={() => handleOpenPdf(doc)}
                             activeOpacity={0.8}
                           >
-                            <Ionicons name="open-outline" size={14} color="#FFFFFF" />
-                            <Text style={styles.docOpenBtnText}>Open</Text>
+                            <Ionicons name="open-outline" size={14} color={isDark ? '#260B00' : '#FFFFFF'} />
+                            <Text style={[styles.docOpenBtnText, { color: isDark ? '#260B00' : '#FFFFFF' }]}>Open</Text>
                           </TouchableOpacity>
                           <TouchableOpacity
                             style={[styles.docShareBtn, { backgroundColor: colors.surface }]}
@@ -492,7 +492,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
             <View style={styles.tabContentContainer}>
               <View style={[styles.cardSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                 <View style={styles.sectionHeaderRow}>
-                  <Ionicons name="hardware-chip-outline" size={18} color={COLORS.primary} />
+                  <Ionicons name="hardware-chip-outline" size={18} color={colors.primary} />
                   <Text style={[styles.sectionHeading, { color: colors.text }]}>Technical Data Sheet</Text>
                 </View>
 
@@ -523,7 +523,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
               {product.documents && product.documents.length > 0 && (
                 <View style={[styles.cardSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                   <View style={styles.sectionHeaderRow}>
-                    <Ionicons name="document-text-outline" size={18} color={COLORS.primary} />
+                    <Ionicons name="document-text-outline" size={18} color={colors.primary} />
                     <Text style={[styles.sectionHeading, { color: colors.text }]}>Manufacturer PDF Files</Text>
                   </View>
                   <View style={styles.docListContainer}>
@@ -588,19 +588,21 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
                   <Ionicons
                     name="document-text-outline"
                     size={15}
-                    color={supportSubTab === 'manuals' ? COLORS.primary : colors.textSecondary}
+                    color={supportSubTab === 'manuals' ? colors.primary : colors.textSecondary}
                   />
                   <Text
                     style={[
                       styles.supportSubTabText,
-                      { color: supportSubTab === 'manuals' ? COLORS.primary : colors.textSecondary },
+                      { color: supportSubTab === 'manuals' ? colors.primary : colors.textSecondary },
                     ]}
                   >
                     Datasheet & Manuals
                   </Text>
                   {product.documents && product.documents.length > 0 && (
-                    <View style={styles.supportDocCountBadge}>
-                      <Text style={styles.supportDocCountBadgeText}>{product.documents.length}</Text>
+                    <View style={[styles.supportDocCountBadge, { backgroundColor: colors.primary }]}>
+                      <Text style={[styles.supportDocCountBadgeText, { color: isDark ? '#260B00' : '#FFFFFF' }]}>
+                        {product.documents.length}
+                      </Text>
                     </View>
                   )}
                 </TouchableOpacity>
@@ -619,12 +621,12 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
                   <Ionicons
                     name="shield-checkmark-outline"
                     size={15}
-                    color={supportSubTab === 'warranty' ? COLORS.primary : colors.textSecondary}
+                    color={supportSubTab === 'warranty' ? colors.primary : colors.textSecondary}
                   />
                   <Text
                     style={[
                       styles.supportSubTabText,
-                      { color: supportSubTab === 'warranty' ? COLORS.primary : colors.textSecondary },
+                      { color: supportSubTab === 'warranty' ? colors.primary : colors.textSecondary },
                     ]}
                   >
                     Warranty & Help
@@ -638,7 +640,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
                   {/* Official Manufacturer PDF Files */}
                   <View style={[styles.cardSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                     <View style={styles.sectionHeaderRow}>
-                      <Ionicons name="document-attach-outline" size={18} color={COLORS.primary} />
+                      <Ionicons name="document-attach-outline" size={18} color={colors.primary} />
                       <Text style={[styles.sectionHeading, { color: colors.text }]}>
                         Manufacturer Technical Documents
                       </Text>
@@ -704,12 +706,12 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
                             {/* Action Buttons */}
                             <View style={styles.docActionButtonsExpanded}>
                               <TouchableOpacity
-                                style={styles.docOpenBtnExpanded}
+                                style={[styles.docOpenBtnExpanded, { backgroundColor: colors.primary }]}
                                 onPress={() => handleOpenPdf(doc)}
                                 activeOpacity={0.85}
                               >
-                                <Ionicons name="eye-outline" size={16} color="#FFFFFF" />
-                                <Text style={styles.docOpenBtnExpandedText}>Open PDF Natively</Text>
+                                <Ionicons name="eye-outline" size={16} color={isDark ? '#260B00' : '#FFFFFF'} />
+                                <Text style={[styles.docOpenBtnExpandedText, { color: isDark ? '#260B00' : '#FFFFFF' }]}>Open PDF Natively</Text>
                               </TouchableOpacity>
 
                               <TouchableOpacity
@@ -765,7 +767,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
                   {/* Custom Sizing or Schematics Request */}
                   <View style={[styles.cardSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                     <View style={styles.sectionHeaderRow}>
-                      <Ionicons name="construct-outline" size={18} color={COLORS.primary} />
+                      <Ionicons name="construct-outline" size={18} color={colors.primary} />
                       <Text style={[styles.sectionHeading, { color: colors.text }]}>Custom Schematics & Firmware</Text>
                     </View>
                     <Text style={[styles.supportIntroText, { color: colors.textSecondary }]}>
@@ -788,7 +790,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
                 <View style={{ gap: SPACING.md }}>
                   <View style={[styles.cardSection, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                     <View style={styles.sectionHeaderRow}>
-                      <Ionicons name="shield-outline" size={18} color={COLORS.primary} />
+                      <Ionicons name="shield-outline" size={18} color={colors.primary} />
                       <Text style={[styles.sectionHeading, { color: colors.text }]}>Warranty & Official Guarantee</Text>
                     </View>
                     <View style={styles.warrantyHighlightRow}>
@@ -804,18 +806,43 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
                       Radical Engineering is an authorized engineering provider. Every unit includes full replacement or repair coverage per manufacturer policy, alongside certified engineer diagnostics across Kishoreganj and nationwide.
                     </Text>
 
-                    <View style={styles.supportContactBox}>
-                      <Text style={[styles.supportContactTitle, { color: colors.text }]}>Need Help or Sizing Confirmation?</Text>
+                    <View
+                      style={[
+                        styles.supportContactBox,
+                        {
+                          backgroundColor: isDark ? 'rgba(252, 185, 116, 0.08)' : '#FBF6F3',
+                          borderColor: isDark ? 'rgba(252, 185, 116, 0.28)' : '#EAD9D0',
+                          borderWidth: 1,
+                        },
+                      ]}
+                    >
+                      <View style={styles.supportContactHeader}>
+                        <View
+                          style={[
+                            styles.supportContactIconWrap,
+                            {
+                              backgroundColor: isDark ? 'rgba(252, 185, 116, 0.16)' : 'rgba(60, 17, 0, 0.08)',
+                            },
+                          ]}
+                        >
+                          <Ionicons name="headset-outline" size={18} color={colors.primary} />
+                        </View>
+                        <Text style={[styles.supportContactTitle, { color: colors.text }]}>
+                          Need Help or Sizing Confirmation?
+                        </Text>
+                      </View>
                       <Text style={[styles.supportContactSub, { color: colors.textSecondary }]}>
                         Speak directly with a certified electrical and solar engineer before finalizing your equipment order.
                       </Text>
                       <TouchableOpacity
-                        style={styles.callHotlineButton}
+                        style={[styles.callHotlineButton, { backgroundColor: colors.primary }]}
                         onPress={handleCallHotline}
                         activeOpacity={0.85}
                       >
-                        <Ionicons name="call" size={16} color="#FFFFFF" />
-                        <Text style={styles.callHotlineText}>Call Hotline: {APP_CONFIG.hotline1}</Text>
+                        <Ionicons name="call" size={16} color={isDark ? '#260B00' : '#FFFFFF'} />
+                        <Text style={[styles.callHotlineText, { color: isDark ? '#260B00' : '#FFFFFF' }]}>
+                          Call Hotline: {APP_CONFIG.hotline1}
+                        </Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -851,7 +878,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.addToCartActionBtn}
+          style={[styles.addToCartActionBtn, { backgroundColor: isDark ? '#1E293B' : '#0F172A' }]}
           onPress={() => addToCart(product, quantity)}
           activeOpacity={0.85}
         >
@@ -860,11 +887,11 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.buyNowActionBtn}
+          style={[styles.buyNowActionBtn, { backgroundColor: colors.primary }]}
           onPress={handleAddToCartAndCart}
           activeOpacity={0.85}
         >
-          <Text style={styles.buyNowActionText}>Buy Now</Text>
+          <Text style={[styles.buyNowActionText, { color: isDark ? '#260B00' : '#FFFFFF' }]}>Buy Now</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -1244,32 +1271,42 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   supportContactBox: {
-    backgroundColor: COLORS.primaryLight,
     padding: SPACING.md,
     borderRadius: RADIUS.md,
     marginTop: SPACING.md,
   },
+  supportContactHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: 6,
+  },
+  supportContactIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: RADIUS.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   supportContactTitle: {
     fontSize: 14,
     fontWeight: '800',
-    marginBottom: 4,
+    flex: 1,
   },
   supportContactSub: {
     fontSize: 12,
-    lineHeight: 17,
+    lineHeight: 18,
     marginBottom: SPACING.md,
   },
   callHotlineButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.primary,
     borderRadius: RADIUS.md,
-    paddingVertical: 11,
+    paddingVertical: 12,
     gap: 8,
   },
   callHotlineText: {
-    color: '#FFFFFF',
     fontWeight: '800',
     fontSize: 13,
   },

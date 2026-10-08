@@ -252,7 +252,7 @@ export const RichText: React.FC<RichTextProps> = ({ html, style, baseTextStyle }
         if (block.type === 'bullet') {
           return (
             <View key={idx} style={styles.bulletRow}>
-              <View style={[styles.bulletDot, { backgroundColor: COLORS.primary }]} />
+              <View style={[styles.bulletDot, { backgroundColor: colors.primary }]} />
               <Text style={[styles.bulletText, { color: colors.text }, baseTextStyle]}>
                 {block.text}
               </Text>
@@ -318,7 +318,7 @@ export const RichText: React.FC<RichTextProps> = ({ html, style, baseTextStyle }
                   return (
                     <Text
                       key={sIdx}
-                      style={styles.linkText}
+                      style={[styles.linkText, { color: colors.primary }]}
                       onPress={() => Linking.openURL(seg.linkHref!)}
                     >
                       {seg.text}

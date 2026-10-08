@@ -185,7 +185,7 @@ export const CatalogScreen: React.FC<CatalogScreenProps> = ({ navigation, route 
             }
             style={[styles.sortBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
           >
-            <Ionicons name="swap-vertical" size={13} color={COLORS.primary} />
+            <Ionicons name="swap-vertical" size={13} color={colors.primary} />
             <Text style={[styles.sortBtnText, { color: colors.text }]}>
               {sortBy === 'default' ? 'Featured' : sortBy === 'price_asc' ? 'Price: Low' : 'Price: High'}
             </Text>
@@ -195,7 +195,7 @@ export const CatalogScreen: React.FC<CatalogScreenProps> = ({ navigation, route 
 
       {loading ? (
         <View style={styles.centerBox}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
             Loading Directus equipment catalog...
           </Text>
@@ -208,14 +208,14 @@ export const CatalogScreen: React.FC<CatalogScreenProps> = ({ navigation, route 
             Try clearing search filters or selecting another equipment category.
           </Text>
           <TouchableOpacity
-            style={styles.resetBtn}
+            style={[styles.resetBtn, { backgroundColor: colors.primary }]}
             onPress={() => {
               setSelectedCategory('all');
               setSelectedBrand('all');
               setSearchQuery('');
             }}
           >
-            <Text style={styles.resetBtnText}>Reset All Filters</Text>
+            <Text style={[styles.resetBtnText, { color: isDark ? '#260B00' : '#FFFFFF' }]}>Reset All Filters</Text>
           </TouchableOpacity>
         </View>
       ) : (

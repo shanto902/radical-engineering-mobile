@@ -22,7 +22,7 @@ interface SystemBuilderScreenProps {
 }
 
 export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({ navigation }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { addToCart } = useCart();
 
   const [appliances, setAppliances] = useState<Appliance[]>(PRESET_APPLIANCES);
@@ -170,21 +170,21 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({ naviga
         {/* Architecture Mode Toggle */}
         <View style={[styles.modeToggleCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <TouchableOpacity
-            style={[styles.modeButton, isSolarHybrid && styles.activeModeButton]}
+            style={[styles.modeButton, isSolarHybrid && [styles.activeModeButton, { backgroundColor: colors.primary }]]}
             onPress={() => setIsSolarHybrid(true)}
           >
-            <Ionicons name="sunny" size={16} color={isSolarHybrid ? '#FFFFFF' : colors.textSecondary} />
-            <Text style={[styles.modeText, { color: isSolarHybrid ? '#FFFFFF' : colors.text }]}>
+            <Ionicons name="sunny" size={16} color={isSolarHybrid ? (isDark ? '#260B00' : '#FFFFFF') : colors.textSecondary} />
+            <Text style={[styles.modeText, { color: isSolarHybrid ? (isDark ? '#260B00' : '#FFFFFF') : colors.text }]}>
               Solar Hybrid IPS
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.modeButton, !isSolarHybrid && styles.activeModeButton]}
+            style={[styles.modeButton, !isSolarHybrid && [styles.activeModeButton, { backgroundColor: colors.primary }]]}
             onPress={() => setIsSolarHybrid(false)}
           >
-            <Ionicons name="flash" size={16} color={!isSolarHybrid ? '#FFFFFF' : colors.textSecondary} />
-            <Text style={[styles.modeText, { color: !isSolarHybrid ? '#FFFFFF' : colors.text }]}>
+            <Ionicons name="flash" size={16} color={!isSolarHybrid ? (isDark ? '#260B00' : '#FFFFFF') : colors.textSecondary} />
+            <Text style={[styles.modeText, { color: !isSolarHybrid ? (isDark ? '#260B00' : '#FFFFFF') : colors.text }]}>
               Standard IPS
             </Text>
           </TouchableOpacity>
@@ -199,8 +199,8 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({ naviga
                 Add connected devices to compute power consumption
               </Text>
             </View>
-            <View style={styles.totalWattsBadge}>
-              <Text style={styles.totalWattsText}>{results.totalWatts} W</Text>
+            <View style={[styles.totalWattsBadge, { backgroundColor: isDark ? 'rgba(252, 185, 116, 0.15)' : '#F5EBE6' }]}>
+              <Text style={[styles.totalWattsText, { color: colors.primary }]}>{results.totalWatts} W</Text>
             </View>
           </View>
 
@@ -210,7 +210,7 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({ naviga
               style={[styles.applianceRow, { borderBottomColor: colors.border }]}
             >
               <View style={styles.applianceInfo}>
-                <Ionicons name={app.icon as any} size={20} color={COLORS.primary} style={styles.appIcon} />
+                <Ionicons name={app.icon as any} size={20} color={colors.primary} style={styles.appIcon} />
                 <View>
                   <Text style={[styles.appName, { color: colors.text }]}>{app.name}</Text>
                   <Text style={[styles.appWatt, { color: colors.textSecondary }]}>
@@ -253,15 +253,15 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({ naviga
                 style={[
                   styles.hourBtn,
                   {
-                    backgroundColor: backupHours === hours ? COLORS.primary : colors.surfaceVariant,
-                    borderColor: backupHours === hours ? COLORS.primary : colors.border,
+                    backgroundColor: backupHours === hours ? colors.primary : colors.surfaceVariant,
+                    borderColor: backupHours === hours ? colors.primary : colors.border,
                   },
                 ]}
               >
                 <Text
                   style={[
                     styles.hourBtnText,
-                    { color: backupHours === hours ? '#FFFFFF' : colors.text },
+                    { color: backupHours === hours ? (isDark ? '#260B00' : '#FFFFFF') : colors.text },
                   ]}
                 >
                   {hours} Hours
@@ -273,14 +273,14 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({ naviga
 
         {/* Step 3: Engineering Specification Output */}
         <View style={[styles.resultsCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={styles.resultsHeader}>
-            <View>
-              <Text style={styles.engineeredBadge}>RECOMMENDED HARDWARE</Text>
+          <View style={[styles.resultsHeader, { borderBottomColor: colors.border }]}>
+            <View style={{ flex: 1, paddingRight: SPACING.xs }}>
+              <Text style={[styles.engineeredBadge, { color: colors.primary }]}>RECOMMENDED HARDWARE</Text>
               <Text style={[styles.systemVaTitle, { color: colors.text }]}>
                 {results.recommendedVa} VA Inverter
               </Text>
             </View>
-            <View style={styles.voltageBadge}>
+            <View style={[styles.voltageBadge, { backgroundColor: isDark ? '#334155' : '#0F172A' }]}>
               <Text style={styles.voltageBadgeText}>{results.batteryVoltage}V System</Text>
             </View>
           </View>
@@ -288,7 +288,7 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({ naviga
           {/* Hardware Bill of Materials */}
           <View style={styles.bomList}>
             <View style={[styles.bomItem, { backgroundColor: colors.surfaceVariant }]}>
-              <Ionicons name="hardware-chip" size={18} color={COLORS.primary} />
+              <Ionicons name="hardware-chip" size={18} color={colors.primary} />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.bomTitle, { color: colors.text }]}>Inverter / UPS Unit</Text>
                 <Text style={[styles.bomDesc, { color: colors.textSecondary }]}>{results.breakdown.inverter}</Text>
@@ -305,7 +305,7 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({ naviga
 
             {results.breakdown.solarPanels && (
               <View style={[styles.bomItem, { backgroundColor: colors.surfaceVariant }]}>
-                <Ionicons name="sunny" size={18} color={COLORS.secondary} />
+                <Ionicons name="sunny" size={18} color={colors.primary} />
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.bomTitle, { color: colors.text }]}>Solar Array</Text>
                   <Text style={[styles.bomDesc, { color: colors.textSecondary }]}>{results.breakdown.solarPanels}</Text>
@@ -316,11 +316,11 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({ naviga
 
           {/* Price Summary */}
           <View style={[styles.costSummaryBox, { backgroundColor: colors.surfaceVariant }]}>
-            <View>
+            <View style={styles.costSummaryTextCol}>
               <Text style={[styles.costSummaryLabel, { color: colors.textSecondary }]}>Total Package Estimate</Text>
               <Text style={[styles.costSummarySub, { color: colors.textMuted }]}>Includes wiring, rack & setup</Text>
             </View>
-            <Text style={styles.totalCostBDT}>
+            <Text style={[styles.totalCostBDT, { color: colors.primary }]}>
               ৳ {results.estimatedCostBDT.toLocaleString()}
             </Text>
           </View>
@@ -328,12 +328,12 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({ naviga
           {/* Action Buttons */}
           <View style={styles.actionButtonsCol}>
             <TouchableOpacity
-              style={styles.addToCartPackageBtn}
+              style={[styles.addToCartPackageBtn, { backgroundColor: colors.primary }]}
               onPress={handleAddPackageToCart}
               activeOpacity={0.85}
             >
-              <Ionicons name="cart" size={18} color="#FFFFFF" />
-              <Text style={styles.addToCartPackageText}>Add Package to Cart</Text>
+              <Ionicons name="cart" size={18} color={isDark ? '#260B00' : '#FFFFFF'} />
+              <Text style={[styles.addToCartPackageText, { color: isDark ? '#260B00' : '#FFFFFF' }]}>Add Package to Cart</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -482,6 +482,7 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
+    gap: SPACING.sm,
   },
   engineeredBadge: {
     color: COLORS.primary,
@@ -499,6 +500,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: RADIUS.sm,
+    flexShrink: 0,
   },
   voltageBadgeText: {
     color: '#FFFFFF',
@@ -531,6 +533,10 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     borderRadius: RADIUS.md,
     marginTop: SPACING.md,
+    gap: SPACING.sm,
+  },
+  costSummaryTextCol: {
+    flex: 1,
   },
   costSummaryLabel: {
     fontSize: 12,
@@ -540,9 +546,11 @@ const styles = StyleSheet.create({
     fontSize: 10,
   },
   totalCostBDT: {
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: '800',
     color: COLORS.primary,
+    flexShrink: 0,
+    textAlign: 'right',
   },
   actionButtonsCol: {
     gap: SPACING.sm,

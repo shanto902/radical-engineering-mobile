@@ -23,7 +23,7 @@ interface ELearningScreenProps {
 }
 
 export const ELearningScreen: React.FC<ELearningScreenProps> = ({ navigation }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [articles, setArticles] = useState<ELearningArticle[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>('art-battery-care');
 
@@ -75,8 +75,8 @@ export const ELearningScreen: React.FC<ELearningScreenProps> = ({ navigation }) 
 
               <View style={styles.cardContent}>
                 <View style={styles.metaRow}>
-                  <View style={styles.categoryBadge}>
-                    <Text style={styles.categoryText}>{art.category}</Text>
+                  <View style={[styles.categoryBadge, { backgroundColor: isDark ? 'rgba(252, 185, 116, 0.15)' : '#F5EBE6' }]}>
+                    <Text style={[styles.categoryText, { color: colors.primary }]}>{art.category}</Text>
                   </View>
                   <View style={styles.readTimeRow}>
                     <Ionicons name="time-outline" size={12} color={colors.textMuted} />
@@ -111,15 +111,15 @@ export const ELearningScreen: React.FC<ELearningScreenProps> = ({ navigation }) 
                     {/* Official PDF Download Button if available */}
                     {art.downloadUrl && (
                       <TouchableOpacity
-                        style={styles.pdfDownloadBtn}
+                        style={[styles.pdfDownloadBtn, { backgroundColor: colors.primary }]}
                         onPress={() => Linking.openURL(art.downloadUrl!)}
                         activeOpacity={0.85}
                       >
-                        <Ionicons name="document-text" size={18} color="#FFFFFF" />
-                        <Text style={styles.pdfDownloadBtnText}>
+                        <Ionicons name="document-text" size={18} color={isDark ? '#260B00' : '#FFFFFF'} />
+                        <Text style={[styles.pdfDownloadBtnText, { color: isDark ? '#260B00' : '#FFFFFF' }]}>
                           Download Official PDF Document ({art.downloadFilename || 'Manual'})
                         </Text>
-                        <Ionicons name="download-outline" size={16} color="#FFFFFF" />
+                        <Ionicons name="download-outline" size={16} color={isDark ? '#260B00' : '#FFFFFF'} />
                       </TouchableOpacity>
                     )}
 
@@ -143,13 +143,13 @@ export const ELearningScreen: React.FC<ELearningScreenProps> = ({ navigation }) 
                     style={styles.expandToggleBtn}
                     onPress={() => toggleExpand(art.id)}
                   >
-                    <Text style={styles.expandToggleText}>
+                    <Text style={[styles.expandToggleText, { color: colors.primary }]}>
                       {isExpanded ? 'Show Less' : 'Read Full Guide'}
                     </Text>
                     <Ionicons
                       name={isExpanded ? 'chevron-up' : 'chevron-down'}
                       size={16}
-                      color={COLORS.primary}
+                      color={colors.primary}
                     />
                   </TouchableOpacity>
 

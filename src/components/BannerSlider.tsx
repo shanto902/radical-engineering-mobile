@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Image, Dimensions, TouchableOpacity, ScrollView, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
+import { useTheme } from '../context/ThemeContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BANNER_WIDTH = SCREEN_WIDTH - SPACING.md * 2;
@@ -50,6 +51,7 @@ interface BannerSliderProps {
 }
 
 export const BannerSlider: React.FC<BannerSliderProps> = ({ onBannerPress }) => {
+  const { colors } = useTheme();
   const [activeIndex, setActiveIndex] = useState(0);
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -103,7 +105,7 @@ export const BannerSlider: React.FC<BannerSliderProps> = ({ onBannerPress }) => 
             key={index}
             style={[
               styles.dot,
-              index === activeIndex ? styles.activeDot : styles.inactiveDot,
+              index === activeIndex ? [styles.activeDot, { backgroundColor: colors.primary }] : styles.inactiveDot,
             ]}
           />
         ))}

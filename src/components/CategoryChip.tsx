@@ -12,7 +12,7 @@ interface CategoryChipProps {
 }
 
 export const CategoryChip: React.FC<CategoryChipProps> = ({ category, isSelected, onSelect }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
   return (
     <TouchableOpacity
@@ -21,21 +21,21 @@ export const CategoryChip: React.FC<CategoryChipProps> = ({ category, isSelected
       style={[
         styles.chip,
         {
-          backgroundColor: isSelected ? COLORS.primary : colors.surface,
-          borderColor: isSelected ? COLORS.primary : colors.border,
+          backgroundColor: isSelected ? colors.primary : colors.surface,
+          borderColor: isSelected ? colors.primary : colors.border,
         },
       ]}
     >
       <Ionicons
         name={category.icon as any}
         size={16}
-        color={isSelected ? '#FFFFFF' : colors.textSecondary}
+        color={isSelected ? (isDark ? '#260B00' : '#FFFFFF') : colors.textSecondary}
         style={styles.icon}
       />
       <Text
         style={[
           styles.name,
-          { color: isSelected ? '#FFFFFF' : colors.text },
+          { color: isSelected ? (isDark ? '#260B00' : '#FFFFFF') : colors.text },
           isSelected && styles.selectedName,
         ]}
       >

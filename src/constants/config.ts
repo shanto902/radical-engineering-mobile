@@ -17,6 +17,8 @@ export const APP_CONFIG = {
   tagline: 'Powering your home with trusted solar and battery solutions',
   website:
     process.env.EXPO_PUBLIC_SITE_URL || 'https://radicalengineering.com.bd',
+  siteUrl:
+    process.env.EXPO_PUBLIC_SITE_URL || 'https://radicalengineering.com.bd',
   apiBaseUrl,
   assetsBaseUrl,
   accessToken,

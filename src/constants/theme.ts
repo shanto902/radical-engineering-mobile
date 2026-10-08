@@ -1,10 +1,10 @@
 export const COLORS = {
   // Brand colors
-  primary: '#EA580C',         // Solar Orange
-  primaryDark: '#C2410C',
-  primaryLight: '#FFF7ED',
-  secondary: '#D97706',       // Amber Gold
-  secondaryDark: '#B45309',
+  primary: '#3C1100',         // Main Brand Color (Earth Brown)
+  primaryDark: '#260B00',
+  primaryLight: '#F5EBE6',
+  secondary: '#FCB974',       // Solar Warm Gold / Secondary brand color
+  secondaryDark: '#E09B54',
   accent: '#0284C7',          // Sky Blue for electrical/inverter
 
   // Status colors
@@ -15,6 +15,11 @@ export const COLORS = {
 
   // Light Theme
   light: {
+    primary: '#3C1100',
+    primaryDark: '#260B00',
+    primaryLight: '#F5EBE6',
+    secondary: '#FCB974',
+    secondaryDark: '#E09B54',
     background: '#F8FAFC',
     surface: '#FFFFFF',
     surfaceVariant: '#F1F5F9',
@@ -27,6 +32,11 @@ export const COLORS = {
 
   // Dark Theme
   dark: {
+    primary: '#FCB974',
+    primaryDark: '#E09B54',
+    primaryLight: 'rgba(252, 185, 116, 0.12)',
+    secondary: '#FCB974',
+    secondaryDark: '#E09B54',
     background: '#0B0F17',
     surface: '#151D2A',
     surfaceVariant: '#1E293B',

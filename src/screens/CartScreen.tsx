@@ -25,7 +25,7 @@ interface CartScreenProps {
 }
 
 export const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { cart, removeFromCart, updateQuantity, clearCart, totalAmount } = useCart();
   const insets = useSafeAreaInsets();
   const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 16 : 10);
@@ -78,7 +78,7 @@ export const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
           onPress: () => {
             clearCart();
             setCheckoutVisible(false);
-            navigation.navigate('Home');
+            navigation.navigate('MainTabs', { screen: 'Home' });
           },
         },
       ]
@@ -102,10 +102,10 @@ export const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
             Explore our high-efficiency solar panels, IPS systems, and batteries to get started.
           </Text>
           <TouchableOpacity
-            style={styles.browseBtn}
-            onPress={() => navigation.navigate('Catalog')}
+            style={[styles.browseBtn, { backgroundColor: colors.primary }]}
+            onPress={() => navigation.navigate('MainTabs', { screen: 'Catalog' })}
           >
-            <Text style={styles.browseBtnText}>Browse Catalog</Text>
+            <Text style={[styles.browseBtnText, { color: isDark ? '#260B00' : '#FFFFFF' }]}>Browse Catalog</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -137,13 +137,13 @@ export const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
                   </Text>
 
                   {item.customPackage && (
-                    <View style={styles.customBadge}>
-                      <Text style={styles.customBadgeText}>Custom Sized IPS Package</Text>
+                    <View style={[styles.customBadge, { backgroundColor: isDark ? 'rgba(252, 185, 116, 0.15)' : '#F5EBE6' }]}>
+                      <Text style={[styles.customBadgeText, { color: colors.primary }]}>Custom Sized IPS Package</Text>
                     </View>
                   )}
 
                   <View style={styles.priceAndQtyRow}>
-                    <Text style={styles.itemPrice}>
+                    <Text style={[styles.itemPrice, { color: colors.primary }]}>
                       {APP_CONFIG.currency} {price.toLocaleString()}
                     </Text>
 
@@ -190,7 +190,7 @@ export const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
 
             <View style={[styles.totalRow, { borderTopColor: colors.border }]}>
               <Text style={[styles.totalLabel, { color: colors.text }]}>Grand Total</Text>
-              <Text style={styles.totalVal}>
+              <Text style={[styles.totalVal, { color: colors.primary }]}>
                 {APP_CONFIG.currency} {grandTotal.toLocaleString()}
               </Text>
             </View>
@@ -199,12 +199,12 @@ export const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
           {/* Order Actions */}
           <View style={styles.actionsCol}>
             <TouchableOpacity
-              style={styles.primaryCheckoutBtn}
+              style={[styles.primaryCheckoutBtn, { backgroundColor: colors.primary }]}
               onPress={() => setCheckoutVisible(true)}
               activeOpacity={0.85}
             >
-              <Text style={styles.primaryCheckoutText}>Proceed to Checkout</Text>
-              <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+              <Text style={[styles.primaryCheckoutText, { color: isDark ? '#260B00' : '#FFFFFF' }]}>Proceed to Checkout</Text>
+              <Ionicons name="arrow-forward" size={18} color={isDark ? '#260B00' : '#FFFFFF'} />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -297,17 +297,17 @@ export const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
 
               <View style={[styles.modalTotalBox, { backgroundColor: colors.surfaceVariant }]}>
                 <Text style={[styles.modalTotalLabel, { color: colors.textSecondary }]}>Total Payable Amount:</Text>
-                <Text style={styles.modalTotalValue}>
+                <Text style={[styles.modalTotalValue, { color: colors.primary }]}>
                   {APP_CONFIG.currency} {grandTotal.toLocaleString()}
                 </Text>
               </View>
 
               <TouchableOpacity
-                style={styles.confirmOrderBtn}
+                style={[styles.confirmOrderBtn, { backgroundColor: colors.primary }]}
                 onPress={handleDirectSubmitOrder}
                 activeOpacity={0.85}
               >
-                <Text style={styles.confirmOrderText}>Confirm & Submit Order</Text>
+                <Text style={[styles.confirmOrderText, { color: isDark ? '#260B00' : '#FFFFFF' }]}>Confirm & Submit Order</Text>
               </TouchableOpacity>
 
               <TouchableOpacity

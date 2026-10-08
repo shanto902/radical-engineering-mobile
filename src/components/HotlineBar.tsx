@@ -36,10 +36,10 @@ export const HotlineBar: React.FC = () => {
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => handleCall(APP_CONFIG.hotline1Raw)}
-          style={[styles.callBtn, { borderColor: COLORS.primary }]}
+          style={[styles.callBtn, { borderColor: colors.primary }]}
         >
-          <Ionicons name="call" size={15} color={COLORS.primary} />
-          <Text style={styles.callBtnText}>{APP_CONFIG.hotline1}</Text>
+          <Ionicons name="call" size={15} color={colors.primary} />
+          <Text style={[styles.callBtnText, { color: colors.primary }]}>{APP_CONFIG.hotline1}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity

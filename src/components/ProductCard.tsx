@@ -47,7 +47,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, hori
 
         <View style={styles.horizontalDetails}>
           <View style={styles.cardHeaderRow}>
-            <Text style={[styles.brandBadge, { color: COLORS.primary }]} numberOfLines={1}>
+            <Text style={[styles.brandBadge, { color: colors.primary }]} numberOfLines={1}>
               {product.brand}
             </Text>
             {product.subCategory && (
@@ -65,7 +65,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, hori
 
           <View style={styles.priceAndActionRow}>
             <View>
-              <Text style={styles.priceMain}>
+              <Text style={[styles.priceMain, { color: colors.primary }]}>
                 {APP_CONFIG.currency} {product.price.toLocaleString()}
               </Text>
               {product.originalPrice && (
@@ -77,10 +77,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, hori
 
             <TouchableOpacity
               onPress={() => addToCart(product)}
-              style={styles.addCartBtnSmall}
+              style={[styles.addCartBtnSmall, { backgroundColor: colors.primary }]}
               activeOpacity={0.8}
             >
-              <Ionicons name="cart-outline" size={16} color="#FFFFFF" />
+              <Ionicons name="cart-outline" size={16} color={isDark ? '#260B00' : '#FFFFFF'} />
             </TouchableOpacity>
           </View>
         </View>
@@ -142,7 +142,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, hori
       <View style={styles.contentBody}>
         {/* Brand & Stock Status */}
         <View style={styles.metaRow}>
-          <Text style={[styles.brandText, { color: COLORS.primary }]} numberOfLines={1}>
+          <Text style={[styles.brandText, { color: colors.primary }]} numberOfLines={1}>
             {product.brand}
           </Text>
           <View style={styles.stockIndicator}>
@@ -169,7 +169,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, hori
         {/* Price & Add to Cart Footer */}
         <View style={styles.footerRow}>
           <View style={styles.priceColumn}>
-            <Text style={styles.price}>
+            <Text style={[styles.price, { color: colors.primary }]}>
               {APP_CONFIG.currency} {product.price.toLocaleString()}
             </Text>
             {product.originalPrice ? (
@@ -181,10 +181,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, hori
 
           <TouchableOpacity
             onPress={() => addToCart(product)}
-            style={styles.addCartBtn}
+            style={[styles.addCartBtn, { backgroundColor: colors.primary }]}
             activeOpacity={0.8}
           >
-            <Ionicons name="cart" size={16} color="#FFFFFF" />
+            <Ionicons name="cart" size={16} color={isDark ? '#260B00' : '#FFFFFF'} />
           </TouchableOpacity>
         </View>
       </View>

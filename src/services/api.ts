@@ -1,7 +1,7 @@
 import { createDirectus, rest, staticToken, readItems, readItem, createItem } from '@directus/sdk';
 import { APP_CONFIG } from '../constants/config';
 import { CATEGORIES, PRODUCTS, PROJECTS, ELEARNING_ARTICLES, SAMPLE_ORDERS } from '../constants/mockData';
-import { Product, ProductDoc, Category, Project, ELearningArticle, Order } from '../types';
+import { Product, ProductDoc, Category, Project, ELearningArticle, Order, TrackedOrder, TrackedOrderItem } from '../types';
 
 /**
  * Directus SDK Client configured with static Bearer Token
@@ -443,47 +443,155 @@ class ApiService {
     return ELEARNING_ARTICLES;
   }
 
-  async trackOrder(query: string): Promise<Order | null> {
-    const cleanQuery = query.trim().toLowerCase();
+  /**
+   * Helper to map Directus order item and order record to TrackedOrder
+   */
+  private mapToTrackedOrder(item: any): TrackedOrder {
+    const rawItems: any[] = Array.isArray(item.order_items) ? item.order_items : [];
+    const items: TrackedOrderItem[] = rawItems.map(it => {
+      let productName = 'Product';
+      if (it?.product && typeof it.product === 'object' && it.product.name) {
+        productName = it.product.name;
+      } else if (typeof it?.product === 'string') {
+        productName = it.product;
+      } else if (it?.name) {
+        productName = it.name;
+      }
+      return {
+        id: it?.id ? String(it.id) : undefined,
+        quantity: Number(it?.quantity) || 1,
+        productName,
+      };
+    });
+
+    return {
+      id: String(item.id || item.order_id),
+      orderId: String(item.order_id || item.order_number || item.id),
+      customerName: item.name || item.customer_name || 'Customer',
+      phone: item.phone || '',
+      address: item.address || '',
+      status: String(item.status || 'pending').toLowerCase().trim(),
+      placedAt: item.placed_at || item.date_created || item.date || new Date().toISOString(),
+      total: Number(item.total || item.total_amount) || 0,
+      items,
+    };
+  }
+
+  /**
+   * Track orders by mobile number or order ID.
+   * Directly queries Directus collection 'orders' with fallback to web endpoint.
+   */
+  async trackOrders(query: string): Promise<TrackedOrder[]> {
+    const rawQuery = query.trim();
+    if (!rawQuery) return [];
+
+    let cleanQuery = rawQuery.replace(/[\s\-\(\)]/g, '');
+    if (cleanQuery.startsWith('+880')) {
+      cleanQuery = cleanQuery.substring(3);
+    } else if (cleanQuery.startsWith('880')) {
+      cleanQuery = cleanQuery.substring(2);
+    }
+
+    // 1. Directus SDK readItems with real fields matching web application
     try {
       const data: any = await Promise.race([
         directus.request(
           readItems('orders' as any, {
             filter: {
               _or: [
-                { order_number: { _icontains: cleanQuery } },
+                { phone: { _eq: cleanQuery } },
+                { order_id: { _eq: cleanQuery } },
                 { phone: { _icontains: cleanQuery } },
+                { order_id: { _icontains: cleanQuery } },
               ],
             },
+            sort: ['-placed_at'],
+            fields: [
+              'id',
+              'order_id',
+              'name',
+              'status',
+              'placed_at',
+              'phone',
+              'total',
+              'address',
+              'order_items.*',
+              'order_items.product.name',
+            ],
           } as any)
         ),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000)),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 6000)),
       ]);
+
       if (Array.isArray(data) && data.length > 0) {
-        const item: any = data[0];
-        return {
-          id: String(item.id),
-          orderNumber: item.order_number || item.id,
-          customerName: item.customer_name || 'Customer',
-          phone: item.phone || '',
-          address: item.address || '',
-          items: item.items || [],
-          totalAmount: Number(item.total_amount) || 0,
-          status: item.status || 'received',
-          date: item.date || 'Recent',
-          trackingSteps: item.tracking_steps || SAMPLE_ORDERS[0].trackingSteps,
-        };
+        return data.map(item => this.mapToTrackedOrder(item));
       }
-    } catch {
-      // Offline fallback
+    } catch (err) {
+      console.warn('Directus trackOrders error:', err);
     }
 
-    const found = SAMPLE_ORDERS.find(
+    // 2. Fallback to web API: https://radicalengineering.com.bd/api/order-tracker?mobile=...
+    try {
+      const siteUrl = APP_CONFIG.siteUrl.replace(/\/+$/, '');
+      const resp = await fetch(`${siteUrl}/api/order-tracker?mobile=${encodeURIComponent(cleanQuery)}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (resp.ok) {
+        const json = await resp.json();
+        if (Array.isArray(json.orders) && json.orders.length > 0) {
+          return json.orders.map((item: any) => this.mapToTrackedOrder(item));
+        }
+      }
+    } catch (err) {
+      console.warn('Web API order-tracker fallback error:', err);
+    }
+
+    // 3. Fallback to mock data matching phone or order number
+    const mockMatches = SAMPLE_ORDERS.filter(
       o =>
-        o.orderNumber.toLowerCase() === cleanQuery ||
-        o.phone.toLowerCase().includes(cleanQuery)
+        o.orderNumber.toLowerCase().includes(cleanQuery.toLowerCase()) ||
+        o.phone.includes(cleanQuery)
     );
-    return found || null;
+    if (mockMatches.length > 0) {
+      return mockMatches.map(m => ({
+        id: m.id,
+        orderId: m.orderNumber,
+        customerName: m.customerName,
+        phone: m.phone,
+        address: m.address,
+        status: m.status === 'completed' ? 'delivered' : m.status === 'in_transit' ? 'shipped' : 'processing',
+        placedAt: new Date().toISOString(),
+        total: m.totalAmount,
+        items: m.items.map(it => ({
+          productName: it.productTitle,
+          quantity: it.quantity,
+        })),
+      }));
+    }
+
+    return [];
+  }
+
+  async trackOrder(query: string): Promise<Order | null> {
+    const list = await this.trackOrders(query);
+    if (list.length === 0) return null;
+    const first = list[0];
+    return {
+      id: first.id,
+      orderNumber: first.orderId,
+      customerName: first.customerName,
+      phone: first.phone,
+      address: first.address,
+      items: first.items.map(it => ({
+        productTitle: it.productName,
+        quantity: it.quantity,
+        price: 0,
+      })),
+      totalAmount: first.total,
+      status: (first.status === 'delivered' ? 'completed' : first.status === 'shipped' ? 'in_transit' : 'received') as any,
+      date: first.placedAt,
+      trackingSteps: SAMPLE_ORDERS[0].trackingSteps,
+    };
   }
 
   async submitInquiry(data: {

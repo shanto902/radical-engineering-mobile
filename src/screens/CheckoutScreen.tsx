@@ -22,6 +22,7 @@ import { Header } from '../components/Header';
 import { useTheme } from '../context/ThemeContext';
 import { useCart } from '../context/CartContext';
 import { apiService } from '../services/api';
+import { storageService } from '../services/storage';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
 import { APP_CONFIG } from '../constants/config';
 
@@ -60,6 +61,48 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
+  const [isCustomerInfoLoaded, setIsCustomerInfoLoaded] = useState(false);
+
+  // Load saved customer information from local storage on mount
+  useEffect(() => {
+    let isMounted = true;
+    const loadSavedCustomerInfo = async () => {
+      try {
+        const saved = await storageService.getCheckoutCustomerInfo();
+        if (saved && isMounted) {
+          if (saved.phone) setPhone(saved.phone);
+          if (saved.name) setName(saved.name);
+          if (saved.address) setAddress(saved.address);
+          if (saved.notes) setNotes(saved.notes);
+        }
+      } catch {
+        // ignore
+      } finally {
+        if (isMounted) {
+          setIsCustomerInfoLoaded(true);
+        }
+      }
+    };
+
+    loadSavedCustomerInfo();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Auto-save customer information to local storage on changes
+  useEffect(() => {
+    if (isCustomerInfoLoaded) {
+      if (phone.trim() || name.trim() || address.trim() || notes.trim()) {
+        storageService.saveCheckoutCustomerInfo({
+          phone: phone.trim(),
+          name: name.trim(),
+          address: address.trim(),
+          notes: notes.trim(),
+        });
+      }
+    }
+  }, [phone, name, address, notes, isCustomerInfoLoaded]);
 
   // Lookup & Submit States
   const [customerLookupStatus, setCustomerLookupStatus] = useState<
@@ -233,6 +276,24 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
         const buyerPhone = norm;
         const buyerTotal = grandTotal;
 
+        // Persist customer information to local device storage
+        storageService.saveCheckoutCustomerInfo({
+          phone: buyerPhone,
+          name: buyerName,
+          address: address.trim(),
+          notes: notes.trim(),
+        });
+
+        // Save order to device order history
+        storageService.saveLocalPlacedOrder({
+          orderId,
+          customerName: buyerName,
+          phone: buyerPhone,
+          total: buyerTotal,
+          date: new Date().toISOString(),
+          itemsCount: cart.reduce((sum, item) => sum + item.quantity, 0),
+        });
+
         // Clear cart and show animation modal
         clearCart();
         setPlacedOrderData({
@@ -325,9 +386,41 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.cardTitle, { color: colors.text }]}>Shipping & Contact Details</Text>
                 <Text style={[styles.cardSubtitle, { color: colors.textSecondary }]}>
-                  Enter phone first to auto-fill previous orders
+                  {phone || name || address
+                    ? 'Saved on this phone for faster checkout'
+                    : 'Enter phone first to auto-fill previous orders'}
                 </Text>
               </View>
+              {(phone || name || address) && (
+                <TouchableOpacity
+                  onPress={() => {
+                    Alert.alert(
+                      'Clear Saved Details',
+                      'Do you want to clear your saved contact and shipping information from this phone?',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Clear',
+                          style: 'destructive',
+                          onPress: () => {
+                            setPhone('');
+                            setName('');
+                            setAddress('');
+                            setNotes('');
+                            setCustomerLookupStatus('idle');
+                            storageService.clearCheckoutCustomerInfo();
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={styles.clearHeaderBtn}
+                >
+                  <Ionicons name="trash-outline" size={13} color={colors.textSecondary} />
+                  <Text style={[styles.clearHeaderText, { color: colors.textSecondary }]}>Clear</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* Field 1: Phone Number (FIRST) */}
@@ -769,6 +862,18 @@ const styles = StyleSheet.create({
   cardSubtitle: {
     fontSize: 11,
     marginTop: 1,
+  },
+  clearHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.xs,
+  },
+  clearHeaderText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   formGroup: {
     marginBottom: SPACING.md,

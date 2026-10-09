@@ -15,6 +15,7 @@ import * as Clipboard from "expo-clipboard";
 import { Header } from "../components/Header";
 import { useTheme } from "../context/ThemeContext";
 import { apiService } from "../services/api";
+import { storageService } from "../services/storage";
 import { TrackedOrder } from "../types";
 import { COLORS, SPACING, RADIUS } from "../constants/theme";
 import { APP_CONFIG } from "../constants/config";
@@ -83,6 +84,13 @@ export const OrderTrackerScreen: React.FC<OrderTrackerScreenProps> = ({
       const trimmed = paramQuery.trim();
       setQuery(trimmed);
       handleSearch(trimmed);
+    } else {
+      // Check if user has a saved customer phone on this device
+      storageService.getCheckoutCustomerInfo().then((saved) => {
+        if (saved?.phone) {
+          setQuery((prev) => (prev ? prev : saved.phone));
+        }
+      });
     }
   }, [route?.params?.query, route?.params?.orderId]);
 

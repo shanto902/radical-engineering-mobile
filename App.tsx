@@ -5,6 +5,8 @@ import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { CartProvider } from './src/context/CartContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
+import { navigationRef } from './src/navigation/navigationRef';
+import { CartToast } from './src/components/CartToast';
 
 import { COLORS } from './src/constants/theme';
 
@@ -15,6 +17,7 @@ const NavigationRoot: React.FC = () => {
     <>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <NavigationContainer
+        ref={navigationRef}
         theme={{
           dark: isDark,
           colors: {
@@ -35,6 +38,7 @@ const NavigationRoot: React.FC = () => {
       >
         <AppNavigator />
       </NavigationContainer>
+      <CartToast />
     </>
   );
 };
@@ -50,4 +54,3 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
-

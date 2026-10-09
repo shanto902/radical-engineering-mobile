@@ -1,7 +1,30 @@
-import { createDirectus, rest, staticToken, readItems, readItem, createItem } from '@directus/sdk';
+import { createDirectus, rest, staticToken, readItems, readItem, createItem, createItems } from '@directus/sdk';
 import { APP_CONFIG } from '../constants/config';
 import { CATEGORIES, PRODUCTS, PROJECTS, ELEARNING_ARTICLES, SAMPLE_ORDERS } from '../constants/mockData';
 import { Product, ProductDoc, Category, Project, ELearningArticle, Order, TrackedOrder, TrackedOrderItem } from '../types';
+
+export interface CreateOrderItem {
+  id: string;
+  productTitle?: string;
+  quantity: number;
+  price?: number;
+}
+
+export interface CreateOrderParams {
+  name: string;
+  phone: string;
+  address: string;
+  notes?: string;
+  total: number;
+  items: CreateOrderItem[];
+}
+
+export interface CreateOrderResult {
+  success: boolean;
+  orderId?: string;
+  orderNumber?: string;
+  error?: string;
+}
 
 /**
  * Directus SDK Client configured with static Bearer Token
@@ -350,6 +373,34 @@ class ApiService {
           const capacityMatch = item.title?.match(/(\d+(?:\.\d+)?\s*(?:kw|kilo\s*watt|w|va))/i);
           const detectedCapacity = item.capacity || (capacityMatch ? capacityMatch[0].toUpperCase() : 'Field Installation');
 
+          let parsedVideos: { link: string }[] = [];
+          if (Array.isArray(item.videos)) {
+            parsedVideos = item.videos
+              .map((v: any) => {
+                if (typeof v === 'string') return { link: v.trim() };
+                if (v && typeof v === 'object') return { link: (v.link || v.url || '').trim() };
+                return null;
+              })
+              .filter((v: any): v is { link: string } => !!(v && v.link));
+          } else if (typeof item.videos === 'string' && item.videos.trim()) {
+            try {
+              const parsed = JSON.parse(item.videos);
+              if (Array.isArray(parsed)) {
+                parsedVideos = parsed
+                  .map((v: any) => {
+                    if (typeof v === 'string') return { link: v.trim() };
+                    if (v && typeof v === 'object') return { link: (v.link || v.url || '').trim() };
+                    return null;
+                  })
+                  .filter((v: any): v is { link: string } => !!(v && v.link));
+              } else if (typeof parsed === 'string') {
+                parsedVideos = [{ link: parsed.trim() }];
+              }
+            } catch {
+              parsedVideos = [{ link: item.videos.trim() }];
+            }
+          }
+
           return {
             id: String(item.id),
             title: item.title,
@@ -360,10 +411,12 @@ class ApiService {
             description: cleanBody.length > 5 ? cleanBody : shortDesc,
             category: item.category || 'Solar & Electrical Installation',
             date: dateStr,
-            location: item.location || 'Kishoreganj, Bangladesh',
+            dateCreated: item.date_created,
+            sort: typeof item.sort === 'number' ? item.sort : undefined,
+            location: item.location ? String(item.location).trim() : 'Kishoreganj, Bangladesh',
             capacity: detectedCapacity,
             image: item.image ? `${this.assetsUrl}/${item.image}` : PROJECTS[0].image,
-            videos: Array.isArray(item.videos) ? item.videos : [],
+            videos: parsedVideos,
             highlights: item.highlights || [
               'Engineered by certified electrical engineers',
               'Full compliance with Bangladesh National Building Code (BNBC)',
@@ -591,6 +644,227 @@ class ApiService {
       status: (first.status === 'delivered' ? 'completed' : first.status === 'shipped' ? 'in_transit' : 'received') as any,
       date: first.placedAt,
       trackingSteps: SAMPLE_ORDERS[0].trackingSteps,
+    };
+  }
+
+  /**
+   * Fetch customer name and address from previous order by phone number.
+   * Mirrors web application /api/last-order-by-phone
+   */
+  async getLastOrderByPhone(phone: string): Promise<{ name?: string; address?: string } | null> {
+    const cleanPhone = (phone || '').replace(/[\s\-\(\)]/g, '');
+    let normalizedPhone = cleanPhone;
+    if (normalizedPhone.startsWith('+880')) {
+      normalizedPhone = '0' + normalizedPhone.substring(4);
+    } else if (normalizedPhone.startsWith('880')) {
+      normalizedPhone = '0' + normalizedPhone.substring(3);
+    }
+    if (!/^01[0-9]{9}$/.test(normalizedPhone)) {
+      return null;
+    }
+
+    // 1. Web API endpoint
+    try {
+      const siteUrl = APP_CONFIG.siteUrl.replace(/\/+$/, '');
+      const resp = await fetch(`${siteUrl}/api/last-order-by-phone`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ phone: normalizedPhone }),
+      });
+      if (resp.ok) {
+        const json = await resp.json();
+        if (json && json.found) {
+          return {
+            name: json.name || undefined,
+            address: json.address || undefined,
+          };
+        }
+      }
+    } catch (err) {
+      console.warn('Web API last-order-by-phone error:', err);
+    }
+
+    // 2. Directus fallback
+    try {
+      const data: any = await directus.request(
+        readItems('orders' as any, {
+          filter: {
+            phone: { _eq: normalizedPhone },
+          },
+          sort: ['-date_created'],
+          limit: 1,
+          fields: ['name', 'address'],
+        } as any)
+      );
+      if (Array.isArray(data) && data.length > 0 && data[0]) {
+        return {
+          name: data[0].name || undefined,
+          address: data[0].address || undefined,
+        };
+      }
+    } catch (err) {
+      console.warn('Directus last-order-by-phone error:', err);
+    }
+
+    return null;
+  }
+
+  /**
+   * Create and place a new customer order.
+   * Mirrors web application /api/create-order route with fallback to Directus SDK.
+   */
+  async createOrder(params: CreateOrderParams): Promise<CreateOrderResult> {
+    const rawPhone = (params.phone || '').trim();
+    let normalizedPhone = rawPhone.replace(/[\s\-\(\)]/g, '');
+    if (normalizedPhone.startsWith('+880')) {
+      normalizedPhone = '0' + normalizedPhone.substring(4);
+    } else if (normalizedPhone.startsWith('880')) {
+      normalizedPhone = '0' + normalizedPhone.substring(3);
+    }
+
+    if (!params.name || !params.name.trim()) {
+      return { success: false, error: 'Customer full name is required.' };
+    }
+
+    if (!normalizedPhone || !/^01[0-9]{9}$/.test(normalizedPhone)) {
+      return {
+        success: false,
+        error: 'Please enter a valid 11-digit Bangladeshi mobile number (e.g. 017xxxxxxxx).',
+      };
+    }
+
+    if (!params.address || !params.address.trim()) {
+      return { success: false, error: 'Delivery and installation address is required.' };
+    }
+
+    if (!Array.isArray(params.items) || params.items.length === 0) {
+      return { success: false, error: 'Your cart is empty. Please add items before placing order.' };
+    }
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const finalTotal = Math.max(1, Math.round(params.total));
+
+    // Construct enriched address with notes and custom package specs
+    let enrichedAddress = params.address.trim();
+    if (params.notes && params.notes.trim()) {
+      enrichedAddress += `\n[Special Notes: ${params.notes.trim()}]`;
+    }
+
+    const customItems = params.items.filter(it => !uuidRegex.test(it.id));
+    if (customItems.length > 0) {
+      const customSummary = customItems
+        .map(it => `${it.productTitle || 'Custom System'} (x${it.quantity})`)
+        .join(', ');
+      enrichedAddress += `\n[Custom Items: ${customSummary}]`;
+    }
+
+    const validUuidItems = params.items
+      .filter(it => uuidRegex.test(it.id) && it.quantity > 0)
+      .map(it => ({
+        id: it.id.trim(),
+        quantity: Math.max(1, Math.round(it.quantity)),
+      }));
+
+    // Method 1: Web backend endpoint /api/create-order (same as web app)
+    if (validUuidItems.length > 0) {
+      try {
+        const siteUrl = APP_CONFIG.siteUrl.replace(/\/+$/, '');
+        const resp = await fetch(`${siteUrl}/api/create-order`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({
+            name: params.name.trim(),
+            phone: normalizedPhone,
+            address: enrichedAddress,
+            total: finalTotal,
+            items: validUuidItems,
+          }),
+        });
+
+        if (resp.ok) {
+          const json = await resp.json();
+          if (json && json.success && json.order) {
+            const returnedOrderId = String(json.order.order_id || json.order.id);
+            return {
+              success: true,
+              orderId: returnedOrderId,
+              orderNumber: returnedOrderId,
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('Web API create-order error, attempting direct Directus SDK:', err);
+      }
+    }
+
+    // Method 2: Direct Directus SDK creation (guarantees execution even if proxy is down or items are custom)
+    try {
+      const now = new Date();
+      const orderId = `${now.getFullYear()}${(now.getMonth() + 1)
+        .toString()
+        .padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}${now
+        .getTime()
+        .toString()
+        .slice(-6)}`;
+
+      const bangladeshOffsetMs = 6 * 60 * 60 * 1000;
+      const bdTime = new Date(now.getTime() + bangladeshOffsetMs);
+      const bdIso = bdTime.toISOString();
+
+      const createdOrder: any = await directus.request(
+        createItem('orders' as any, {
+          order_id: orderId,
+          name: params.name.trim(),
+          phone: normalizedPhone,
+          address: enrichedAddress,
+          total: finalTotal,
+          status: 'pending',
+          placed_at: bdIso,
+        } as any)
+      );
+
+      if (createdOrder && createdOrder.id) {
+        if (validUuidItems.length > 0) {
+          try {
+            await directus.request(
+              createItems(
+                'order_items' as any,
+                validUuidItems.map(item => ({
+                  order: createdOrder.id,
+                  product: item.id,
+                  quantity: item.quantity,
+                })) as any
+              )
+            );
+          } catch (itemErr) {
+            console.warn('Directus createItems order_items error:', itemErr);
+          }
+        }
+
+        const finalOrderId = String(createdOrder.order_id || orderId);
+        return {
+          success: true,
+          orderId: finalOrderId,
+          orderNumber: finalOrderId,
+        };
+      }
+    } catch (directusErr: any) {
+      console.error('Directus SDK order creation error:', directusErr);
+      return {
+        success: false,
+        error: directusErr?.message || 'Failed to submit order. Please try again or order via WhatsApp.',
+      };
+    }
+
+    return {
+      success: false,
+      error: 'Failed to place order. Please try again or contact support.',
     };
   }
 

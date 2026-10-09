@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import { APP_CONFIG } from "../constants/config";
 
 interface OrderTrackerScreenProps {
   navigation: any;
+  route?: any;
 }
 
 const STATUS_STEPS = [
@@ -65,6 +66,7 @@ function formatOrderDate(dateStr: string): string {
 
 export const OrderTrackerScreen: React.FC<OrderTrackerScreenProps> = ({
   navigation,
+  route,
 }) => {
   const { colors, isDark } = useTheme();
 
@@ -74,6 +76,15 @@ export const OrderTrackerScreen: React.FC<OrderTrackerScreenProps> = ({
   const [hasSearched, setHasSearched] = useState(false);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const paramQuery = route?.params?.query || route?.params?.orderId;
+    if (paramQuery && typeof paramQuery === "string") {
+      const trimmed = paramQuery.trim();
+      setQuery(trimmed);
+      handleSearch(trimmed);
+    }
+  }, [route?.params?.query, route?.params?.orderId]);
 
   const handleCopyOrderId = async (orderId: string) => {
     try {

@@ -15,6 +15,7 @@ import { BannerSlider } from '../components/BannerSlider';
 import { HotlineBar } from '../components/HotlineBar';
 import { QuickActionCard } from '../components/QuickActionCard';
 import { ProductCard } from '../components/ProductCard';
+import { ProductCardSkeleton } from '../components/Skeleton';
 import { useTheme } from '../context/ThemeContext';
 import { apiService } from '../services/api';
 import { Product, Category, Project } from '../types';
@@ -43,6 +44,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const [selectedHomeCat, setSelectedHomeCat] = useState<string>('all');
   const [projects, setProjects] = useState<Project[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingProducts, setLoadingProducts] = useState(true);
 
   const loadData = async () => {
     try {
@@ -56,6 +58,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
       setProjects(projs.slice(0, 3));
     } catch {
       // offline fallback
+    } finally {
+      setLoadingProducts(false);
     }
   };
 
@@ -265,13 +269,22 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           </ScrollView>
 
           <View style={styles.productsGrid}>
-            {filteredFeatured.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                onPress={() => navigation.navigate('ProductDetail', { productId: product.id })}
-              />
-            ))}
+            {loadingProducts ? (
+              <>
+                <ProductCardSkeleton />
+                <ProductCardSkeleton />
+                <ProductCardSkeleton />
+                <ProductCardSkeleton />
+              </>
+            ) : (
+              filteredFeatured.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  onPress={() => navigation.navigate('ProductDetail', { productId: product.id })}
+                />
+              ))
+            )}
           </View>
         </View>
 

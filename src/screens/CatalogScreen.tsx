@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Header } from '../components/Header';
 import { CategoryChip } from '../components/CategoryChip';
 import { ProductCard } from '../components/ProductCard';
+import { ProductGridSkeleton } from '../components/Skeleton';
 import { useTheme } from '../context/ThemeContext';
 import { apiService } from '../services/api';
 import { Product, Category } from '../types';
@@ -194,12 +195,9 @@ export const CatalogScreen: React.FC<CatalogScreenProps> = ({ navigation, route 
       </View>
 
       {loading ? (
-        <View style={styles.centerBox}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-            Loading Directus equipment catalog...
-          </Text>
-        </View>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <ProductGridSkeleton count={6} />
+        </ScrollView>
       ) : displayedProducts.length === 0 ? (
         <View style={styles.centerBox}>
           <Ionicons name="search" size={48} color={colors.textMuted} />

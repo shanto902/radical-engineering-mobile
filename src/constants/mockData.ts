@@ -340,6 +340,9 @@ export const PROJECTS: Project[] = [
       'Complete rooftop surge arrestor installation',
       'Full protection for solar inverters and home appliances',
     ],
+    videos: [
+      { link: 'https://www.youtube.com/watch?v=kYJzXf1k9yA' },
+    ],
   },
   {
     id: 'proj-hybrid-3-5kw',
@@ -357,6 +360,9 @@ export const PROJECTS: Project[] = [
       'Pure sine wave hybrid inverter with auto grid synchronization',
       'Estimated annual savings of ~৳ 45,000 BDT in electricity bills',
     ],
+    videos: [
+      { link: 'https://www.facebook.com/radicalengineering/videos/987654321' },
+    ],
   },
   {
     id: 'proj-battery-care',
@@ -373,6 +379,9 @@ export const PROJECTS: Project[] = [
       'TDS-tested pure distilled water replenishment',
       'Terminal anti-corrosion grease treatment',
       'Average battery life boosted by 2+ additional years',
+    ],
+    videos: [
+      { link: 'https://example.com/videos/battery-maintenance-guide.mp4' },
     ],
   },
 ];

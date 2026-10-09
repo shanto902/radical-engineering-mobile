@@ -7,6 +7,7 @@ import { SystemBuilderScreen } from '../screens/SystemBuilderScreen';
 import { OrderTrackerScreen } from '../screens/OrderTrackerScreen';
 import { ELearningScreen } from '../screens/ELearningScreen';
 import { CartScreen } from '../screens/CartScreen';
+import { CheckoutScreen } from '../screens/CheckoutScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -25,6 +26,7 @@ export const AppNavigator: React.FC = () => {
       <Stack.Screen name="OrderTracker" component={OrderTrackerScreen} />
       <Stack.Screen name="ELearning" component={ELearningScreen} />
       <Stack.Screen name="Cart" component={CartScreen} />
+      <Stack.Screen name="Checkout" component={CheckoutScreen} />
     </Stack.Navigator>
   );
 };

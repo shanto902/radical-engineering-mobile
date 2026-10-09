@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,38 +12,77 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Header } from '../components/Header';
 import { RichText } from '../components/RichText';
+import { ProjectCardSkeleton } from '../components/Skeleton';
 import { useTheme } from '../context/ThemeContext';
 import { apiService } from '../services/api';
 import { Project } from '../types';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
 import { APP_CONFIG } from '../constants/config';
+import { getVideoPlatformInfo } from '../utils/video';
 
 interface ProjectsScreenProps {
   navigation: any;
 }
 
+type SortOrder = 'latest' | 'oldest';
+
 export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ navigation }) => {
   const { colors, isDark } = useTheme();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
+  const [sortOrder, setSortOrder] = useState<SortOrder>('latest');
 
   useEffect(() => {
-    apiService.getProjects().then(p => {
-      setProjects(p);
-      // Automatically expand first post
-      if (p.length > 0) {
-        setExpandedIds({ [p[0].id]: true });
-      }
-    });
+    setLoading(true);
+    apiService
+      .getProjects()
+      .then((p) => {
+        setProjects(p);
+        if (p.length > 0) {
+          setExpandedIds({ [p[0].id]: true });
+        }
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
+  const getProjectTimestamp = (project: Project): number => {
+    if (project.dateCreated) {
+      const t = new Date(project.dateCreated).getTime();
+      if (!isNaN(t)) return t;
+    }
+    if (project.date && project.date !== 'Recent') {
+      const t = new Date(project.date).getTime();
+      if (!isNaN(t)) return t;
+    }
+    return 0;
+  };
+
+  const sortedProjects = useMemo(() => {
+    return [...projects].sort((a, b) => {
+      const timeA = getProjectTimestamp(a);
+      const timeB = getProjectTimestamp(b);
+
+      if (sortOrder === 'latest') {
+        if (timeA !== timeB) return timeB - timeA;
+        return (a.sort ?? 0) - (b.sort ?? 0);
+      } else {
+        if (timeA !== timeB) return timeA - timeB;
+        return (b.sort ?? 0) - (a.sort ?? 0);
+      }
+    });
+  }, [projects, sortOrder]);
+
   const toggleExpand = (id: string) => {
-    setExpandedIds(prev => ({ ...prev, [id]: !prev[id] }));
+    setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   const handleConsultProject = (project: Project) => {
+    const loc = project.location || 'Bangladesh';
     const text = encodeURIComponent(
-      `Hello Radical Engineering! I saw your post "${project.title}" (${project.capacity}) in ${project.location}. I want to consult for a similar installation.`
+      `Hello Radical Engineering! I saw your post "${project.title}" (${project.capacity}) in ${loc}. I want to consult for a similar installation.`
     );
     Linking.openURL(`https://wa.me/${APP_CONFIG.whatsappNumber.replace('+', '')}?text=${text}`);
   };
@@ -59,6 +98,16 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ navigation }) =>
     }
   };
 
+  const handleOpenVideo = (url: string) => {
+    if (!url) return;
+    const formattedUrl = url.startsWith('http://') || url.startsWith('https://')
+      ? url
+      : `https://${url}`;
+    Linking.openURL(formattedUrl).catch((err) => {
+      console.warn('Cannot open video link:', formattedUrl, err);
+    });
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Header
@@ -68,129 +117,233 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ navigation }) =>
       />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* Header Notice */}
         <View style={styles.headerNotice}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Verified Field Projects & Engineering Posts</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>
+            Verified Field Projects & Engineering Posts
+          </Text>
           <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
             Real engineering installations, video walkthroughs, and technical blog guides across Bangladesh.
           </Text>
         </View>
 
-        {projects.map((project) => {
-          const isExpanded = !!expandedIds[project.id];
-          return (
-            <View
-              key={project.id}
-              style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        {/* Sort Controls Bar */}
+        <View
+          style={[
+            styles.sortBar,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <View style={styles.sortBarLeft}>
+            <Ionicons name="funnel-outline" size={13} color={colors.primary} />
+            <Text style={[styles.sortBarCount, { color: colors.text }]}>
+              {projects.length} Projects
+            </Text>
+          </View>
+
+          <View style={styles.sortButtonsRow}>
+            <TouchableOpacity
+              style={[
+                styles.sortPill,
+                sortOrder === 'latest'
+                  ? [styles.sortPillActive, { backgroundColor: colors.primary, borderColor: colors.primary }]
+                  : [styles.sortPillInactive, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }],
+              ]}
+              onPress={() => setSortOrder('latest')}
+              activeOpacity={0.8}
             >
-              <Image source={{ uri: project.image }} style={styles.image} resizeMode="cover" />
+              <Ionicons
+                name="arrow-down"
+                size={12}
+                color={sortOrder === 'latest' ? (isDark ? '#260B00' : '#FFFFFF') : colors.textSecondary}
+              />
+              <Text
+                style={[
+                  styles.sortPillText,
+                  {
+                    color: sortOrder === 'latest' ? (isDark ? '#260B00' : '#FFFFFF') : colors.textSecondary,
+                    fontWeight: sortOrder === 'latest' ? '700' : '500',
+                  },
+                ]}
+              >
+                Latest First
+              </Text>
+            </TouchableOpacity>
 
-              <View style={styles.body}>
-                <View style={styles.metaRow}>
-                  <View style={[styles.capacityBadge, { backgroundColor: isDark ? 'rgba(252, 185, 116, 0.15)' : '#F5EBE6' }]}>
-                    <Text style={[styles.capacityText, { color: colors.primary }]}>{project.capacity}</Text>
+            <TouchableOpacity
+              style={[
+                styles.sortPill,
+                sortOrder === 'oldest'
+                  ? [styles.sortPillActive, { backgroundColor: colors.primary, borderColor: colors.primary }]
+                  : [styles.sortPillInactive, { backgroundColor: colors.surfaceVariant, borderColor: colors.border }],
+              ]}
+              onPress={() => setSortOrder('oldest')}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name="arrow-up"
+                size={12}
+                color={sortOrder === 'oldest' ? (isDark ? '#260B00' : '#FFFFFF') : colors.textSecondary}
+              />
+              <Text
+                style={[
+                  styles.sortPillText,
+                  {
+                    color: sortOrder === 'oldest' ? (isDark ? '#260B00' : '#FFFFFF') : colors.textSecondary,
+                    fontWeight: sortOrder === 'oldest' ? '700' : '500',
+                  },
+                ]}
+              >
+                Oldest First
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Projects List or Skeleton Loading */}
+        {loading ? (
+          <>
+            <ProjectCardSkeleton />
+            <ProjectCardSkeleton />
+          </>
+        ) : (
+          sortedProjects.map((project) => {
+            const isExpanded = !!expandedIds[project.id];
+            return (
+              <View
+                key={project.id}
+                style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              >
+                <Image source={{ uri: project.image }} style={styles.image} resizeMode="cover" />
+
+                <View style={styles.body}>
+                  <View style={styles.metaRow}>
+                    <View
+                      style={[
+                        styles.capacityBadge,
+                        { backgroundColor: isDark ? 'rgba(252, 185, 116, 0.15)' : '#F5EBE6' },
+                      ]}
+                    >
+                      <Text style={[styles.capacityText, { color: colors.primary }]}>{project.capacity}</Text>
+                    </View>
+                    <Text style={[styles.dateText, { color: colors.textMuted }]}>{project.date}</Text>
                   </View>
-                  <Text style={[styles.dateText, { color: colors.textMuted }]}>{project.date}</Text>
-                </View>
 
-                <Text style={[styles.title, { color: colors.text }]}>{project.title}</Text>
+                  <Text style={[styles.title, { color: colors.text }]}>{project.title}</Text>
 
-                <View style={styles.locationRow}>
-                  <Ionicons name="location" size={14} color={colors.primary} />
-                  <Text style={[styles.locationText, { color: colors.textSecondary }]}>
-                    {project.location}
-                  </Text>
-                  <Text style={{ color: colors.textMuted }}>•</Text>
-                  <Text style={[styles.categoryText, { color: COLORS.accent }]}>{project.category}</Text>
-                </View>
-
-                {/* Short Description */}
-                {project.shortDescription ? (
-                  <Text style={[styles.description, { color: colors.textSecondary }]}>
-                    {project.shortDescription}
-                  </Text>
-                ) : null}
-
-                {/* YouTube Video Links */}
-                {project.videos && project.videos.length > 0 && (
-                  <View style={styles.videosContainer}>
-                    {project.videos.map((vid, vIdx) => (
-                      <TouchableOpacity
-                        key={vIdx}
-                        style={styles.youtubeWatchBtn}
-                        onPress={() => Linking.openURL(vid.link)}
-                        activeOpacity={0.85}
-                      >
-                        <Ionicons name="logo-youtube" size={18} color="#FF0000" />
-                        <Text style={styles.youtubeWatchText}>Watch Video on YouTube</Text>
-                        <Ionicons name="open-outline" size={14} color="#FF0000" />
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-
-                {/* Expanded Full Rich Text Content */}
-                {isExpanded && project.body && (
-                  <View style={[styles.richTextSection, { borderTopColor: colors.border }]}>
-                    <RichText html={project.body} />
-                  </View>
-                )}
-
-                {/* Expand / Collapse Button */}
-                {project.body ? (
-                  <TouchableOpacity
-                    style={[styles.toggleBtn, { backgroundColor: colors.surfaceVariant }]}
-                    onPress={() => toggleExpand(project.id)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.toggleBtnText, { color: colors.text }]}>
-                      {isExpanded ? 'Hide Details' : 'Read Full Post & Photos'}
+                  {/* Location and Category */}
+                  <View style={styles.locationRow}>
+                    <Ionicons name="location" size={14} color={colors.primary} />
+                    <Text style={[styles.locationText, { color: colors.textSecondary }]}>
+                      {project.location || 'Kishoreganj, Bangladesh'}
                     </Text>
-                    <Ionicons
-                      name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                      size={15}
-                      color={colors.text}
-                    />
-                  </TouchableOpacity>
-                ) : null}
-
-                {/* Highlights */}
-                {project.highlights && project.highlights.length > 0 && (
-                  <View style={[styles.highlightsBox, { backgroundColor: colors.surfaceVariant }]}>
-                    <Text style={[styles.highlightsHeading, { color: colors.text }]}>
-                      Technical Highlights:
-                    </Text>
-                    {project.highlights.map((h, i) => (
-                      <View key={i} style={styles.highlightItem}>
-                        <Ionicons name="checkmark-circle" size={14} color={COLORS.success} />
-                        <Text style={[styles.highlightText, { color: colors.text }]}>{h}</Text>
-                      </View>
-                    ))}
+                    <Text style={{ color: colors.textMuted }}>•</Text>
+                    <Text style={[styles.categoryText, { color: COLORS.accent }]}>{project.category}</Text>
                   </View>
-                )}
 
-                {/* Actions Row */}
-                <View style={styles.actionsRow}>
-                  <TouchableOpacity
-                    style={styles.consultBtn}
-                    onPress={() => handleConsultProject(project)}
-                    activeOpacity={0.85}
-                  >
-                    <Ionicons name="logo-whatsapp" size={16} color="#FFFFFF" />
-                    <Text style={styles.consultBtnText}>Inquire for Similar Project</Text>
-                  </TouchableOpacity>
+                  {/* Short Description */}
+                  {project.shortDescription ? (
+                    <Text style={[styles.description, { color: colors.textSecondary }]}>
+                      {project.shortDescription}
+                    </Text>
+                  ) : null}
 
-                  <TouchableOpacity
-                    style={[styles.shareBtn, { backgroundColor: colors.surfaceVariant }]}
-                    onPress={() => handleShareProject(project)}
-                    activeOpacity={0.85}
-                  >
-                    <Ionicons name="share-social-outline" size={18} color={colors.text} />
-                  </TouchableOpacity>
+                  {/* Video Links */}
+                  {project.videos && project.videos.length > 0 && (
+                    <View style={styles.videosContainer}>
+                      {project.videos.map((vid, vIdx) => {
+                        const meta = getVideoPlatformInfo(vid.link, colors.primary, isDark);
+                        return (
+                          <TouchableOpacity
+                            key={vIdx}
+                            style={[
+                              styles.videoWatchBtn,
+                              {
+                                backgroundColor: meta.backgroundColor,
+                                borderColor: meta.borderColor,
+                              },
+                            ]}
+                            onPress={() => handleOpenVideo(vid.link)}
+                            activeOpacity={0.85}
+                          >
+                            <Ionicons name={meta.icon} size={18} color={meta.color} />
+                            <Text style={[styles.videoWatchText, { color: meta.color }]}>
+                              {meta.label}
+                            </Text>
+                            <Ionicons name="open-outline" size={14} color={meta.color} />
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
+
+                  {/* Expanded Full Rich Text Content */}
+                  {isExpanded && project.body && (
+                    <View style={[styles.richTextSection, { borderTopColor: colors.border }]}>
+                      <RichText html={project.body} />
+                    </View>
+                  )}
+
+                  {/* Expand / Collapse Button */}
+                  {project.body ? (
+                    <TouchableOpacity
+                      style={[styles.toggleBtn, { backgroundColor: colors.surfaceVariant }]}
+                      onPress={() => toggleExpand(project.id)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.toggleBtnText, { color: colors.text }]}>
+                        {isExpanded ? 'Hide Details' : 'Read Full Post & Photos'}
+                      </Text>
+                      <Ionicons
+                        name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                        size={15}
+                        color={colors.text}
+                      />
+                    </TouchableOpacity>
+                  ) : null}
+
+                  {/* Highlights */}
+                  {project.highlights && project.highlights.length > 0 && (
+                    <View style={[styles.highlightsBox, { backgroundColor: colors.surfaceVariant }]}>
+                      <Text style={[styles.highlightsHeading, { color: colors.text }]}>
+                        Technical Highlights:
+                      </Text>
+                      {project.highlights.map((h, i) => (
+                        <View key={i} style={styles.highlightItem}>
+                          <Ionicons name="checkmark-circle" size={14} color={COLORS.success} />
+                          <Text style={[styles.highlightText, { color: colors.text }]}>{h}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Actions Row */}
+                  <View style={styles.actionsRow}>
+                    <TouchableOpacity
+                      style={styles.consultBtn}
+                      onPress={() => handleConsultProject(project)}
+                      activeOpacity={0.85}
+                    >
+                      <Ionicons name="logo-whatsapp" size={16} color="#FFFFFF" />
+                      <Text style={styles.consultBtnText}>Inquire for Similar Project</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.shareBtn, { backgroundColor: colors.surfaceVariant }]}
+                      onPress={() => handleShareProject(project)}
+                      activeOpacity={0.85}
+                    >
+                      <Ionicons name="share-social-outline" size={18} color={colors.text} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
-            </View>
-          );
-        })}
+            );
+          })
+        )}
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -215,6 +368,43 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 12,
     marginTop: 2,
+  },
+  sortBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    marginBottom: SPACING.md,
+  },
+  sortBarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sortBarCount: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  sortButtonsRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  sortPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    gap: 4,
+  },
+  sortPillActive: {},
+  sortPillInactive: {},
+  sortPillText: {
+    fontSize: 11,
   },
   card: {
     borderRadius: RADIUS.lg,
@@ -260,29 +450,67 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: SPACING.sm,
+    marginBottom: 8,
   },
   locationText: {
     fontSize: 12,
+    fontWeight: '600',
   },
   categoryText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
   description: {
-    fontSize: 12,
+    fontSize: 13,
     lineHeight: 18,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
   },
-  highlightsBox: {
-    padding: SPACING.sm + 4,
+  videosContainer: {
+    marginVertical: SPACING.xs,
+    gap: 8,
+  },
+  videoWatchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
     borderRadius: RADIUS.md,
-    marginBottom: SPACING.md,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    gap: 8,
   },
-  highlightsHeading: {
+  videoWatchText: {
     fontSize: 12,
     fontWeight: '700',
+    flex: 1,
+  },
+  richTextSection: {
+    borderTopWidth: 1,
+    paddingTop: SPACING.sm,
+    marginTop: SPACING.sm,
+  },
+  toggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: RADIUS.sm,
+    marginTop: SPACING.sm,
+    gap: 4,
+  },
+  toggleBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  highlightsBox: {
+    padding: SPACING.sm + 2,
+    borderRadius: RADIUS.md,
+    marginTop: SPACING.sm,
+  },
+  highlightsHeading: {
+    fontSize: 11,
+    fontWeight: '700',
     marginBottom: 6,
+    textTransform: 'uppercase',
   },
   highlightItem: {
     flexDirection: 'row',
@@ -292,12 +520,11 @@ const styles = StyleSheet.create({
   },
   highlightText: {
     fontSize: 11,
-    lineHeight: 16,
-    flex: 1,
   },
   actionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: SPACING.md,
     gap: 8,
   },
   consultBtn: {
@@ -308,60 +535,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#25D366',
     borderRadius: RADIUS.md,
     paddingVertical: 10,
-    gap: 6,
+    gap: 8,
   },
   consultBtnText: {
     color: '#FFFFFF',
-    fontSize: 13,
     fontWeight: '700',
+    fontSize: 13,
   },
   shareBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: RADIUS.md,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  videosContainer: {
-    marginVertical: SPACING.sm,
-    gap: 8,
-  },
-  youtubeWatchBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
     borderRadius: RADIUS.md,
-    gap: 8,
-  },
-  youtubeWatchText: {
-    flex: 1,
-    color: '#DC2626',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  richTextSection: {
-    borderTopWidth: 1,
-    paddingTop: SPACING.md,
-    marginTop: SPACING.sm,
-    marginBottom: SPACING.sm,
-  },
-  toggleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    borderRadius: RADIUS.sm,
-    gap: 6,
-    marginBottom: SPACING.md,
-  },
-  toggleBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
   },
 });
-

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,6 @@ import {
   ScrollView,
   Image,
   TouchableOpacity,
-  TextInput,
-  Modal,
-  Alert,
   Linking,
   Platform,
 } from 'react-native';
@@ -30,14 +27,7 @@ export const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 16 : 10);
 
-  const [checkoutVisible, setCheckoutVisible] = useState(false);
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [customerAddress, setCustomerAddress] = useState('');
-  const [notes, setNotes] = useState('');
-
-  const shippingCost = cart.length > 0 ? 500 : 0;
-  const grandTotal = totalAmount + shippingCost;
+  const grandTotal = totalAmount;
 
   const handleWhatsAppCheckout = () => {
     if (cart.length === 0) return;
@@ -51,37 +41,10 @@ export const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
       )
       .join('\n');
 
-    let message = `*Radical Engineering Order / Quotation Request*\n\n${itemsText}\n\n*Subtotal:* ৳${totalAmount.toLocaleString()}\n*Estimated Shipping/Site Transit:* ৳${shippingCost.toLocaleString()}\n*Grand Total:* ৳${grandTotal.toLocaleString()}`;
-
-    if (customerName) message += `\n\n*Customer:* ${customerName}`;
-    if (customerPhone) message += `\n*Phone:* ${customerPhone}`;
-    if (customerAddress) message += `\n*Address:* ${customerAddress}`;
-    if (notes) message += `\n*Notes:* ${notes}`;
+    let message = `*Radical Engineering Order / Quotation Request*\n\n${itemsText}\n\n*Total Payable:* ৳${totalAmount.toLocaleString()}`;
 
     Linking.openURL(
       `https://wa.me/${APP_CONFIG.whatsappNumber.replace('+', '')}?text=${encodeURIComponent(message)}`
-    );
-  };
-
-  const handleDirectSubmitOrder = () => {
-    if (!customerName.trim() || !customerPhone.trim() || !customerAddress.trim()) {
-      Alert.alert('Required Fields', 'Please enter your Name, Phone Number, and Delivery Address.');
-      return;
-    }
-
-    Alert.alert(
-      'Order Submitted Successfully!',
-      `Thank you, ${customerName}! Your order of ৳${grandTotal.toLocaleString()} has been received. Our engineering desk will call ${customerPhone} to confirm delivery and scheduling.`,
-      [
-        {
-          text: 'OK',
-          onPress: () => {
-            clearCart();
-            setCheckoutVisible(false);
-            navigation.navigate('MainTabs', { screen: 'Home' });
-          },
-        },
-      ]
     );
   };
 
@@ -173,25 +136,16 @@ export const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
             <Text style={[styles.summaryTitle, { color: colors.text }]}>Order Summary</Text>
 
             <View style={styles.summaryRow}>
-              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Equipment Subtotal</Text>
+              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Total Items</Text>
               <Text style={[styles.summaryVal, { color: colors.text }]}>
-                {APP_CONFIG.currency} {totalAmount.toLocaleString()}
-              </Text>
-            </View>
-
-            <View style={styles.summaryRow}>
-              <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>
-                Estimated Courier / Site Transit
-              </Text>
-              <Text style={[styles.summaryVal, { color: colors.text }]}>
-                {APP_CONFIG.currency} {shippingCost.toLocaleString()}
+                {cart.reduce((sum, item) => sum + item.quantity, 0)} items
               </Text>
             </View>
 
             <View style={[styles.totalRow, { borderTopColor: colors.border }]}>
-              <Text style={[styles.totalLabel, { color: colors.text }]}>Grand Total</Text>
+              <Text style={[styles.totalLabel, { color: colors.text }]}>Total Amount</Text>
               <Text style={[styles.totalVal, { color: colors.primary }]}>
-                {APP_CONFIG.currency} {grandTotal.toLocaleString()}
+                {APP_CONFIG.currency} {totalAmount.toLocaleString()}
               </Text>
             </View>
           </View>
@@ -200,7 +154,7 @@ export const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
           <View style={styles.actionsCol}>
             <TouchableOpacity
               style={[styles.primaryCheckoutBtn, { backgroundColor: colors.primary }]}
-              onPress={() => setCheckoutVisible(true)}
+              onPress={() => navigation.navigate('Checkout')}
               activeOpacity={0.85}
             >
               <Text style={[styles.primaryCheckoutText, { color: isDark ? '#260B00' : '#FFFFFF' }]}>Proceed to Checkout</Text>
@@ -220,108 +174,6 @@ export const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
           <View style={{ height: 30 + bottomPadding }} />
         </ScrollView>
       )}
-
-      {/* Checkout Modal */}
-      <Modal
-        visible={checkoutVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setCheckoutVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.modalContent,
-              {
-                backgroundColor: colors.surface,
-                paddingBottom: bottomPadding + SPACING.md,
-              },
-            ]}
-          >
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Checkout & Delivery</Text>
-              <TouchableOpacity onPress={() => setCheckoutVisible(false)}>
-                <Ionicons name="close" size={24} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.formGroup}>
-                <Text style={[styles.formLabel, { color: colors.text }]}>Customer Full Name *</Text>
-                <TextInput
-                  placeholder="e.g. Ashik Ali Shanto"
-                  placeholderTextColor={colors.textMuted}
-                  value={customerName}
-                  onChangeText={setCustomerName}
-                  style={[styles.formInput, { backgroundColor: colors.surfaceVariant, color: colors.text }]}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={[styles.formLabel, { color: colors.text }]}>Mobile Phone Number *</Text>
-                <TextInput
-                  placeholder="e.g. 01760195100"
-                  placeholderTextColor={colors.textMuted}
-                  keyboardType="phone-pad"
-                  value={customerPhone}
-                  onChangeText={setCustomerPhone}
-                  style={[styles.formInput, { backgroundColor: colors.surfaceVariant, color: colors.text }]}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={[styles.formLabel, { color: colors.text }]}>Delivery / Installation Address *</Text>
-                <TextInput
-                  placeholder="House, Road, Area, District (e.g. Kishoreganj Sadar)"
-                  placeholderTextColor={colors.textMuted}
-                  multiline
-                  numberOfLines={2}
-                  value={customerAddress}
-                  onChangeText={setCustomerAddress}
-                  style={[styles.formInput, styles.textArea, { backgroundColor: colors.surfaceVariant, color: colors.text }]}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={[styles.formLabel, { color: colors.text }]}>Special Notes (Optional)</Text>
-                <TextInput
-                  placeholder="Site survey timing, roof type, or wiring requirements"
-                  placeholderTextColor={colors.textMuted}
-                  multiline
-                  numberOfLines={2}
-                  value={notes}
-                  onChangeText={setNotes}
-                  style={[styles.formInput, styles.textArea, { backgroundColor: colors.surfaceVariant, color: colors.text }]}
-                />
-              </View>
-
-              <View style={[styles.modalTotalBox, { backgroundColor: colors.surfaceVariant }]}>
-                <Text style={[styles.modalTotalLabel, { color: colors.textSecondary }]}>Total Payable Amount:</Text>
-                <Text style={[styles.modalTotalValue, { color: colors.primary }]}>
-                  {APP_CONFIG.currency} {grandTotal.toLocaleString()}
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                style={[styles.confirmOrderBtn, { backgroundColor: colors.primary }]}
-                onPress={handleDirectSubmitOrder}
-                activeOpacity={0.85}
-              >
-                <Text style={[styles.confirmOrderText, { color: isDark ? '#260B00' : '#FFFFFF' }]}>Confirm & Submit Order</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.modalWhatsappBtn}
-                onPress={handleWhatsAppCheckout}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="logo-whatsapp" size={18} color="#FFFFFF" />
-                <Text style={styles.modalWhatsappText}>Send Order via WhatsApp</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 };
@@ -508,89 +360,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    borderTopLeftRadius: RADIUS.xl,
-    borderTopRightRadius: RADIUS.xl,
-    padding: SPACING.lg,
-    maxHeight: '85%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.md,
-  },
-  modalTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  formGroup: {
-    marginBottom: SPACING.sm + 4,
-  },
-  formLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  formInput: {
-    borderRadius: RADIUS.md,
-    paddingHorizontal: 12,
-    height: 42,
-    fontSize: 13,
-  },
-  textArea: {
-    height: 60,
-    textAlignVertical: 'top',
-    paddingVertical: 8,
-  },
-  modalTotalBox: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: SPACING.md,
-    borderRadius: RADIUS.md,
-    marginVertical: SPACING.md,
-  },
-  modalTotalLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  modalTotalValue: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: COLORS.primary,
-  },
-  confirmOrderBtn: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: 12,
-    borderRadius: RADIUS.md,
-    alignItems: 'center',
-    marginBottom: SPACING.sm,
-  },
-  confirmOrderText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  modalWhatsappBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#25D366',
-    paddingVertical: 11,
-    borderRadius: RADIUS.md,
-    gap: 6,
-  },
-  modalWhatsappText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 13,
   },
 });
 

@@ -60,6 +60,7 @@ export interface Project {
   shortDescription?: string;
   category: string;
   date: string;
+  dateCreated?: string;
   client?: string;
   location: string;
   capacity: string;
@@ -67,6 +68,7 @@ export interface Project {
   images?: string[];
   videos?: { link: string }[];
   highlights: string[];
+  sort?: number;
 }
 
 export interface ELearningArticle {

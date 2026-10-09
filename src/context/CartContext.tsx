@@ -2,6 +2,12 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Product, CartItem, SystemBuilderResults } from '../types';
 import { storageService } from '../services/storage';
 
+export interface CartToastData {
+  product: Product;
+  quantity: number;
+  timestamp: number;
+}
+
 interface CartContextType {
   cart: CartItem[];
   wishlist: string[];
@@ -13,6 +19,9 @@ interface CartContextType {
   totalItemsCount: number;
   toggleWishlist: (productId: string) => void;
   isWishlisted: (productId: string) => boolean;
+  toast: CartToastData | null;
+  hideToast: () => void;
+  showToast: (product: Product, quantity?: number) => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -20,6 +29,7 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [wishlist, setWishlist] = useState<string[]>([]);
+  const [toast, setToast] = useState<CartToastData | null>(null);
 
   useEffect(() => {
     storageService.getCart().then(items => {
@@ -40,6 +50,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     storageService.saveWishlist(newWishlist);
   };
 
+  const showToast = (product: Product, quantity = 1) => {
+    setToast({ product, quantity, timestamp: Date.now() });
+  };
+
+  const hideToast = () => {
+    setToast(null);
+  };
+
   const addToCart = (product: Product, quantity = 1, customPackage?: SystemBuilderResults) => {
     const existingIndex = cart.findIndex(
       item => item.product.id === product.id && !item.customPackage && !customPackage
@@ -58,6 +76,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       saveCartItems([...cart, newItem]);
     }
+
+    // Trigger toast notification
+    showToast(product, quantity);
   };
 
   const removeFromCart = (itemId: string) => {
@@ -116,6 +137,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         totalItemsCount,
         toggleWishlist,
         isWishlisted,
+        toast,
+        hideToast,
+        showToast,
       }}
     >
       {children}

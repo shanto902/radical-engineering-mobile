@@ -20,6 +20,7 @@ import { useCart } from '../context/CartContext';
 import { apiService } from '../services/api';
 import { Product, ProductDoc } from '../types';
 import { RichText } from '../components/RichText';
+import { ProductDetailSkeleton } from '../components/Skeleton';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
 import { APP_CONFIG } from '../constants/config';
 
@@ -53,11 +54,17 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({ naviga
 
   if (loading) {
     return (
-      <View style={[styles.centerBox, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-          Loading product specifications...
-        </Text>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <Header
+          showBack
+          onBack={() => navigation.goBack()}
+          title="Product Specs"
+          subtitle="Loading Details..."
+          onOpenCart={() => navigation.navigate('Cart')}
+        />
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <ProductDetailSkeleton />
+        </ScrollView>
       </View>
     );
   }

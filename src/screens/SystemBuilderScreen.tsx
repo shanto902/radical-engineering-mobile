@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Linking,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Header } from '../components/Header';
@@ -139,14 +138,6 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({ naviga
     };
 
     addToCart(customProduct, 1, results);
-    Alert.alert(
-      'Package Added!',
-      'Your customized IPS system has been added to the Cart. Would you like to review it?',
-      [
-        { text: 'Keep Designing', style: 'cancel' },
-        { text: 'View Cart', onPress: () => navigation.navigate('Cart') },
-      ]
-    );
   };
 
   const handleConsultWhatsApp = () => {
@@ -193,7 +184,7 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({ naviga
         {/* Step 1: Appliances Selection */}
         <View style={[styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.sectionHeader}>
-            <View>
+            <View style={styles.sectionTitleCol}>
               <Text style={[styles.cardTitle, { color: colors.text }]}>1. Select Your Appliances</Text>
               <Text style={[styles.cardSubtitle, { color: colors.textSecondary }]}>
                 Add connected devices to compute power consumption
@@ -392,8 +383,13 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: SPACING.md,
+    gap: SPACING.sm,
+  },
+  sectionTitleCol: {
+    flex: 1,
+    paddingRight: SPACING.xs,
   },
   cardTitle: {
     fontSize: 15,
@@ -402,6 +398,7 @@ const styles = StyleSheet.create({
   cardSubtitle: {
     fontSize: 11,
     marginTop: 2,
+    lineHeight: 16,
   },
   totalWattsBadge: {
     backgroundColor: COLORS.primaryLight,

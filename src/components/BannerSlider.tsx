@@ -1,58 +1,46 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image, Dimensions, TouchableOpacity, ScrollView, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  Dimensions,
+  TouchableOpacity,
+  ScrollView,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
+} from 'react-native';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
 import { useTheme } from '../context/ThemeContext';
+import { BannerItem } from '../types';
+import { apiService, FALLBACK_BANNERS } from '../services/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BANNER_WIDTH = SCREEN_WIDTH - SPACING.md * 2;
 
-interface BannerItem {
-  id: string;
-  title: string;
-  subtitle: string;
-  tag: string;
-  cta: string;
-  image: string;
-  targetScreen?: string;
-}
-
-const BANNERS: BannerItem[] = [
-  {
-    id: 'b1',
-    title: 'Harness the Power\nof the Sun',
-    subtitle: 'High-efficiency Tier 1 solar panels with up to 30 years linear warranty.',
-    tag: 'SOLAR ENERGY',
-    cta: 'Explore Solar',
-    image: 'https://admin.atiar.com.bd/assets/3791e375-6479-459c-afd0-5579f41cea68',
-    targetScreen: 'RoofPlanner',
-  },
-  {
-    id: 'b2',
-    title: 'Smart Solar IPS &\nHybrid Solutions',
-    subtitle: 'Keep your lights and fans running uninterrupted during power cuts.',
-    tag: 'POWER BACKUP',
-    cta: 'Build System',
-    image: 'https://admin.atiar.com.bd/assets/b0c27da6-9f3a-4c63-b4ee-665fbf21bb12',
-    targetScreen: 'SystemBuilder',
-  },
-  {
-    id: 'b3',
-    title: 'Lightning Protection\nSystems (LPS)',
-    subtitle: 'Certified surge suppression & pure copper earthing for total building safety.',
-    tag: 'ENGINEERING SAFETY',
-    cta: 'View Case Study',
-    image: 'https://admin.atiar.com.bd/assets/4151bfd8-a685-47a7-b4db-63470e954531',
-    targetScreen: 'Projects',
-  },
-];
-
 interface BannerSliderProps {
-  onBannerPress: (targetScreen?: string) => void;
+  banners?: BannerItem[];
+  onBannerPress: (banner: BannerItem) => void;
 }
 
-export const BannerSlider: React.FC<BannerSliderProps> = ({ onBannerPress }) => {
+export const BannerSlider: React.FC<BannerSliderProps> = ({ banners: propBanners, onBannerPress }) => {
   const { colors } = useTheme();
+  const [internalBanners, setInternalBanners] = useState<BannerItem[]>(FALLBACK_BANNERS);
   const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    if (propBanners && propBanners.length > 0) {
+      setInternalBanners(propBanners);
+    } else {
+      apiService.getSliders().then((data) => {
+        if (data && data.length > 0) {
+          setInternalBanners(data);
+        }
+      });
+    }
+  }, [propBanners]);
+
+  const activeBanners = propBanners && propBanners.length > 0 ? propBanners : internalBanners;
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const slide = Math.round(event.nativeEvent.contentOffset.x / BANNER_WIDTH);
@@ -73,11 +61,11 @@ export const BannerSlider: React.FC<BannerSliderProps> = ({ onBannerPress }) => 
         decelerationRate="fast"
         contentContainerStyle={styles.scrollContent}
       >
-        {BANNERS.map((banner) => (
+        {activeBanners.map((banner) => (
           <TouchableOpacity
             key={banner.id}
             activeOpacity={0.9}
-            onPress={() => onBannerPress(banner.targetScreen)}
+            onPress={() => onBannerPress(banner)}
             style={styles.bannerCard}
           >
             <Image source={{ uri: banner.image }} style={styles.image} resizeMode="cover" />
@@ -100,7 +88,7 @@ export const BannerSlider: React.FC<BannerSliderProps> = ({ onBannerPress }) => 
 
       {/* Pagination dots */}
       <View style={styles.pagination}>
-        {BANNERS.map((_, index) => (
+        {activeBanners.map((_, index) => (
           <View
             key={index}
             style={[

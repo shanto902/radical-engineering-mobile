@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Product } from '../types';
 import { useTheme } from '../context/ThemeContext';
@@ -32,11 +32,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, hori
           },
         ]}
       >
-        <View style={styles.horizontalImageWrapper}>
+        <View style={[styles.horizontalImageWrapper, { backgroundColor: isDark ? '#0F172A' : '#F1F5F9' }]}>
+          <Image
+            source={{ uri: product.image }}
+            style={styles.imageBackdrop}
+            resizeMode="cover"
+            blurRadius={Platform.OS === 'android' ? 10 : 16}
+          />
+          <View
+            style={[
+              styles.imageOverlay,
+              { backgroundColor: isDark ? 'rgba(0, 0, 0, 0.4)' : 'rgba(255, 255, 255, 0.25)' },
+            ]}
+          />
           <Image
             source={{ uri: product.image }}
             style={styles.horizontalImage}
-            resizeMode="cover"
+            resizeMode="contain"
           />
           {product.wattage && (
             <View style={styles.horizontalWattTag}>
@@ -102,11 +114,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, hori
       ]}
     >
       {/* Image Container with Badges */}
-      <View style={styles.imageContainer}>
+      <View style={[styles.imageContainer, { backgroundColor: isDark ? '#0F172A' : '#F1F5F9' }]}>
+        <Image
+          source={{ uri: product.image }}
+          style={styles.imageBackdrop}
+          resizeMode="cover"
+          blurRadius={Platform.OS === 'android' ? 12 : 20}
+        />
+        <View
+          style={[
+            styles.imageOverlay,
+            { backgroundColor: isDark ? 'rgba(0, 0, 0, 0.4)' : 'rgba(255, 255, 255, 0.25)' },
+          ]}
+        />
         <Image
           source={{ uri: product.image }}
           style={styles.productImage}
-          resizeMode="cover"
+          resizeMode="contain"
         />
 
         {/* Floating Wishlist Button */}
@@ -159,12 +183,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, hori
         </Text>
 
         {/* Sub-category / Warranty tag */}
-        <View style={styles.subTagRow}>
-          <Ionicons name="shield-checkmark-outline" size={11} color={COLORS.success} />
-          <Text style={[styles.subTagText, { color: colors.textSecondary }]} numberOfLines={1}>
-            {product.warranty}
-          </Text>
-        </View>
+        {product.warranty ? (
+          <View style={styles.subTagRow}>
+            <Ionicons name="shield-checkmark-outline" size={11} color={COLORS.success} />
+            <Text style={[styles.subTagText, { color: colors.textSecondary }]} numberOfLines={1}>
+              {product.warranty}
+            </Text>
+          </View>
+        ) : null}
 
         {/* Price & Add to Cart Footer */}
         <View style={styles.footerRow}>
@@ -210,6 +236,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#F1F5F9',
     position: 'relative',
     overflow: 'hidden',
+  },
+  imageBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    opacity: 0.85,
+    transform: [{ scale: 1.15 }],
+  },
+  imageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   productImage: {
     width: '100%',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   Linking,
   Share,
+  RefreshControl,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Header } from '../components/Header';
@@ -19,34 +21,129 @@ import { Project } from '../types';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
 import { APP_CONFIG } from '../constants/config';
 import { getVideoPlatformInfo } from '../utils/video';
+import { ImageZoomModal } from '../components/ImageZoomModal';
 
 interface ProjectsScreenProps {
   navigation: any;
+  route?: any;
 }
 
 type SortOrder = 'latest' | 'oldest';
 
-export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ navigation }) => {
+export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ navigation, route }) => {
   const { colors, isDark } = useTheme();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const cardLayouts = useRef<Record<string, number>>({});
+  const hasScrolledRef = useRef(false);
+
+  const [activeTargetId, setActiveTargetId] = useState<string | null>(route?.params?.projectId || null);
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
   const [sortOrder, setSortOrder] = useState<SortOrder>('latest');
+  const [zoomModalVisible, setZoomModalVisible] = useState(false);
+  const [zoomImage, setZoomImage] = useState<string>('');
+  const [zoomTitle, setZoomTitle] = useState<string | undefined>(undefined);
+
+  const handleOpenCoverZoom = (img: string, title?: string) => {
+    setZoomImage(img);
+    setZoomTitle(title);
+    setZoomModalVisible(true);
+  };
+
+  useEffect(() => {
+    if (route?.params?.projectId) {
+      setActiveTargetId(route.params.projectId);
+      hasScrolledRef.current = false;
+    }
+  }, [route?.params?.projectId]);
+
+  const resolvedTargetId = useMemo(() => {
+    if (!activeTargetId) return null;
+    const targetStr = String(activeTargetId).toLowerCase();
+    const found = projects.find(
+      (p) => String(p.id) === activeTargetId || (p.slug && p.slug.toLowerCase() === targetStr)
+    );
+    return found ? found.id : String(activeTargetId);
+  }, [projects, activeTargetId]);
+
+  const scrollToTarget = (id: string) => {
+    if (hasScrolledRef.current) return;
+    const y = cardLayouts.current[id];
+    if (typeof y === 'number' && scrollViewRef.current) {
+      scrollViewRef.current.scrollTo({
+        y: Math.max(0, y - 12),
+        animated: true,
+      });
+      hasScrolledRef.current = true;
+    }
+  };
+
+  const loadProjects = async () => {
+    try {
+      const p = await apiService.getProjects();
+      setProjects(p);
+      if (p.length > 0) {
+        setExpandedIds((prev) => {
+          if (activeTargetId) {
+            return { ...prev, [activeTargetId]: true };
+          }
+          if (Object.keys(prev).length === 0) {
+            return { [p[0].id]: true };
+          }
+          return prev;
+        });
+      }
+    } catch (err) {
+      console.warn('Failed to load projects:', err);
+    }
+  };
 
   useEffect(() => {
     setLoading(true);
-    apiService
-      .getProjects()
-      .then((p) => {
-        setProjects(p);
-        if (p.length > 0) {
-          setExpandedIds({ [p[0].id]: true });
-        }
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+    loadProjects().finally(() => {
+      setLoading(false);
+    });
   }, []);
+
+  useEffect(() => {
+    if (resolvedTargetId && !hasScrolledRef.current) {
+      // Auto-expand target post
+      setExpandedIds((prev) => ({ ...prev, [resolvedTargetId]: true }));
+
+      // Timed scrolls ensure reliable animation across layout passes
+      const timer1 = setTimeout(() => {
+        scrollToTarget(resolvedTargetId);
+      }, 150);
+
+      const timer2 = setTimeout(() => {
+        scrollToTarget(resolvedTargetId);
+      }, 500);
+
+      return () => {
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+      };
+    }
+  }, [resolvedTargetId, loading]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    // Remove the scroll ID and clear navigation param so screen stays on top
+    setActiveTargetId(null);
+    hasScrolledRef.current = true;
+    try {
+      navigation.setParams({ projectId: undefined });
+    } catch {
+      // ignore
+    }
+    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    await loadProjects();
+    setRefreshing(false);
+    scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+  };
 
   const getProjectTimestamp = (project: Project): number => {
     if (project.dateCreated) {
@@ -116,7 +213,19 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ navigation }) =>
         onOpenCart={() => navigation.navigate('Cart')}
       />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        ref={scrollViewRef}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        }
+      >
         {/* Header Notice */}
         <View style={styles.headerNotice}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>
@@ -215,9 +324,45 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ navigation }) =>
             return (
               <View
                 key={project.id}
-                style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                onLayout={(e) => {
+                  const y = e.nativeEvent.layout.y;
+                  cardLayouts.current[project.id] = y;
+                  if (resolvedTargetId === project.id && !hasScrolledRef.current) {
+                    scrollToTarget(project.id);
+                  }
+                }}
+                style={[
+                  styles.card,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
               >
-                <Image source={{ uri: project.image }} style={styles.image} resizeMode="cover" />
+                {/* Modern Backdrop-Blurred Image Container */}
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() => handleOpenCoverZoom(project.image, project.title)}
+                  style={[styles.imageContainer, { backgroundColor: isDark ? '#0F172A' : '#1E293B' }]}
+                >
+                  <Image
+                    source={{ uri: project.image }}
+                    style={styles.imageBackdrop}
+                    resizeMode="cover"
+                    blurRadius={Platform.OS === 'android' ? 12 : 22}
+                  />
+                  <View
+                    style={[
+                      styles.imageOverlay,
+                      { backgroundColor: isDark ? 'rgba(0, 0, 0, 0.45)' : 'rgba(0, 0, 0, 0.25)' },
+                    ]}
+                  />
+                  <Image
+                    source={{ uri: project.image }}
+                    style={styles.imageForeground}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
 
                 <View style={styles.body}>
                   <View style={styles.metaRow}>
@@ -305,21 +450,6 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ navigation }) =>
                     </TouchableOpacity>
                   ) : null}
 
-                  {/* Highlights */}
-                  {project.highlights && project.highlights.length > 0 && (
-                    <View style={[styles.highlightsBox, { backgroundColor: colors.surfaceVariant }]}>
-                      <Text style={[styles.highlightsHeading, { color: colors.text }]}>
-                        Technical Highlights:
-                      </Text>
-                      {project.highlights.map((h, i) => (
-                        <View key={i} style={styles.highlightItem}>
-                          <Ionicons name="checkmark-circle" size={14} color={COLORS.success} />
-                          <Text style={[styles.highlightText, { color: colors.text }]}>{h}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
                   {/* Actions Row */}
                   <View style={styles.actionsRow}>
                     <TouchableOpacity
@@ -347,6 +477,14 @@ export const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ navigation }) =>
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Fullscreen Zoom Modal for Cover Image */}
+      <ImageZoomModal
+        visible={zoomModalVisible}
+        images={zoomImage ? [zoomImage] : []}
+        title={zoomTitle}
+        onClose={() => setZoomModalVisible(false)}
+      />
     </View>
   );
 };
@@ -412,10 +550,35 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: SPACING.lg,
   },
-  image: {
+  imageContainer: {
     width: '100%',
-    height: 180,
-    backgroundColor: '#E2E8F0',
+    height: 220,
+    position: 'relative',
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    opacity: 0.85,
+    transform: [{ scale: 1.15 }],
+  },
+  imageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  imageForeground: {
+    width: '100%',
+    height: '100%',
   },
   body: {
     padding: SPACING.md,
@@ -500,26 +663,6 @@ const styles = StyleSheet.create({
   toggleBtnText: {
     fontSize: 12,
     fontWeight: '600',
-  },
-  highlightsBox: {
-    padding: SPACING.sm + 2,
-    borderRadius: RADIUS.md,
-    marginTop: SPACING.sm,
-  },
-  highlightsHeading: {
-    fontSize: 11,
-    fontWeight: '700',
-    marginBottom: 6,
-    textTransform: 'uppercase',
-  },
-  highlightItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
-  },
-  highlightText: {
-    fontSize: 11,
   },
   actionsRow: {
     flexDirection: 'row',

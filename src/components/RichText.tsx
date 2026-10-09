@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
+import { ImageZoomModal } from './ImageZoomModal';
 
 interface RichTextProps {
   html?: string | null;
@@ -27,7 +28,8 @@ type BlockType =
   | { type: 'bullet'; text: string }
   | { type: 'image'; src: string; alt?: string }
   | { type: 'video'; videoId: string; url: string; title?: string }
-  | { type: 'image_grid'; images: string[] };
+  | { type: 'image_grid'; images: string[] }
+  | { type: 'table'; headers: string[]; rows: string[][] };
 
 interface InlineSegment {
   text: string;
@@ -36,20 +38,98 @@ interface InlineSegment {
   linkHref?: string;
 }
 
+const HTML_ENTITY_MAP: Record<string, string> = {
+  deg: '°',
+  plusmn: '±',
+  micro: 'µ',
+  Omega: 'Ω',
+  omega: 'ω',
+  alpha: 'α',
+  beta: 'β',
+  gamma: 'γ',
+  delta: 'δ',
+  Delta: 'Δ',
+  theta: 'θ',
+  lambda: 'λ',
+  mu: 'μ',
+  pi: 'π',
+  sigma: 'σ',
+  tau: 'τ',
+  phi: 'φ',
+  le: '≤',
+  ge: '≥',
+  ne: '≠',
+  times: '×',
+  divide: '÷',
+  sim: '~',
+  asymp: '≈',
+  approx: '≈',
+  copy: '©',
+  reg: '®',
+  trade: '™',
+  nbsp: ' ',
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  bull: '•',
+  hellip: '…',
+  mdash: '—',
+  ndash: '–',
+  permil: '‰',
+  prime: '′',
+  Prime: '″',
+  radic: '√',
+  infin: '∞',
+  euro: '€',
+  pound: '£',
+  yen: '¥',
+  cent: '¢',
+};
+
 /**
- * Decode common HTML entities
+ * Decode common HTML entities (including &deg;, &plusmn;, numeric &#176;, &#x00b0;, and double-escaped &amp;deg;)
  */
-function decodeEntities(str: string): string {
-  return str
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/&bull;/gi, '•')
-    .replace(/&mdash;/gi, '—')
-    .replace(/&ndash;/gi, '–');
+export function decodeEntities(str: string): string {
+  if (!str) return '';
+  let result = str;
+  for (let i = 0; i < 2; i++) {
+    // Decimal numeric entities (&#176; -> °)
+    result = result.replace(/&#(\d+);/g, (match, dec) => {
+      try {
+        return String.fromCodePoint(parseInt(dec, 10));
+      } catch {
+        return match;
+      }
+    });
+
+    // Hex numeric entities (&#x00b0; -> °)
+    result = result.replace(/&#x([0-9a-fA-F]+);/g, (match, hex) => {
+      try {
+        return String.fromCodePoint(parseInt(hex, 16));
+      } catch {
+        return match;
+      }
+    });
+
+    // Named entities (&deg; -> °, &plusmn; -> ±, &lt; -> <, etc.)
+    result = result.replace(/&([a-zA-Z0-9]+);/g, (match, entity) => {
+      const lower = entity.toLowerCase();
+      return HTML_ENTITY_MAP[entity] ?? HTML_ENTITY_MAP[lower] ?? match;
+    });
+
+    // Common unclosed or semi-closed entities (e.g. -25&degC to +60&degC)
+    result = result
+      .replace(/&deg;?/gi, '°')
+      .replace(/&plusmn;?/gi, '±')
+      .replace(/&micro;?/gi, 'µ')
+      .replace(/&Omega;?/g, 'Ω')
+      .replace(/&omega;?/g, 'ω')
+      .replace(/&times;?/gi, '×')
+      .replace(/&nbsp;?/gi, ' ');
+  }
+  return result;
 }
 
 /**
@@ -72,8 +152,8 @@ function parseInline(content: string): InlineSegment[] {
     .replace(/<\/p>/gi, '\n')
     .replace(/<p[^>]*>/gi, '');
 
-  // Regex to split by <a>, <strong>, <b>, <em>, <i> tags
-  const tagRegex = /<(a\s+[^>]*href=["']([^"']+)["'][^>]*|strong|b|em|i)>([\s\S]*?)<\/\1>/gi;
+  // Robust regex to split by <a>, <strong>, <b>, <em>, <i> tags with optional attributes
+  const tagRegex = /<(strong|b|em|i)\b[^>]*>([\s\S]*?)<\/\1>|<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
 
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -85,21 +165,24 @@ function parseInline(content: string): InlineSegment[] {
       if (cleanPre) segments.push({ text: cleanPre });
     }
 
-    const fullTag = match[0];
-    const tagName = match[1].toLowerCase();
-    const innerContent = decodeEntities(match[3].replace(/<[^>]+>/g, ''));
-
-    if (tagName.startsWith('a')) {
-      const hrefMatch = fullTag.match(/href=["']([^"']+)["']/i);
+    if (match[3] !== undefined) {
+      // <a> tag match
+      const href = match[3];
+      const innerContent = decodeEntities(match[4].replace(/<[^>]+>/g, ''));
       segments.push({
-        text: innerContent || (hrefMatch ? hrefMatch[1] : 'Link'),
-        linkHref: hrefMatch ? hrefMatch[1] : undefined,
+        text: innerContent || href || 'Link',
+        linkHref: href,
         isBold: true,
       });
-    } else if (tagName === 'strong' || tagName === 'b') {
-      segments.push({ text: innerContent, isBold: true });
-    } else if (tagName === 'em' || tagName === 'i') {
-      segments.push({ text: innerContent, isItalic: true });
+    } else if (match[1]) {
+      // <strong>, <b>, <em>, <i> tag match
+      const tagName = match[1].toLowerCase();
+      const innerContent = decodeEntities(match[2].replace(/<[^>]+>/g, ''));
+      if (tagName === 'strong' || tagName === 'b') {
+        segments.push({ text: innerContent, isBold: true });
+      } else if (tagName === 'em' || tagName === 'i') {
+        segments.push({ text: innerContent, isItalic: true });
+      }
     }
 
     lastIndex = tagRegex.lastIndex;
@@ -119,6 +202,7 @@ function parseInline(content: string): InlineSegment[] {
   return segments;
 }
 
+
 /**
  * Parses raw HTML string into structured display blocks
  */
@@ -127,41 +211,49 @@ function parseHtmlToBlocks(html: string): BlockType[] {
 
   const blocks: BlockType[] = [];
 
-  // Check if there are tables with multiple images (e.g. project gallery tables)
-  const tableImgRegex = /<table[^>]*>[\s\S]*?<\/table>/gi;
-  let tableMatch: RegExpExecArray | null;
-  const processedTableRanges: [number, number][] = [];
-
-  while ((tableMatch = tableImgRegex.exec(html)) !== null) {
-    const tableHtml = tableMatch[0];
-    const imgMatches = Array.from(tableHtml.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi));
-    if (imgMatches.length > 0) {
-      const imageUrls = imgMatches.map(m => m[1]);
-      blocks.push({ type: 'image_grid', images: imageUrls });
-      processedTableRanges.push([tableMatch.index, tableMatch.index + tableHtml.length]);
-    }
-  }
-
-  // Remove processed tables from main body
-  let cleanedHtml = html;
-  for (const [start, end] of processedTableRanges.reverse()) {
-    cleanedHtml = cleanedHtml.slice(0, start) + cleanedHtml.slice(end);
-  }
+  // Normalize <div> to <p> so Directus dir="auto" divs are parsed cleanly
+  const normalizedHtml = html
+    .replace(/<div(?:\s+[^>]*)?>/gi, '<p>')
+    .replace(/<\/div>/gi, '</p>');
 
   // Split by top-level block tags
-  const blockRegex = /<(h[1-6]|p|li|img|blockquote)[^>]*>([\s\S]*?)<\/\1>|<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+  const blockRegex = /<(table|h[1-6]|p|li|blockquote)[^>]*>([\s\S]*?)<\/\1>|<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
 
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   let hasParsedBlocks = false;
 
-  while ((match = blockRegex.exec(cleanedHtml)) !== null) {
+  while ((match = blockRegex.exec(normalizedHtml)) !== null) {
     hasParsedBlocks = true;
     const tag = match[1] ? match[1].toLowerCase() : 'img';
     const content = match[2] || '';
     const standaloneImgSrc = match[3];
 
-    if (tag === 'img' || standaloneImgSrc) {
+    if (tag === 'table') {
+      const imgMatches = Array.from(content.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi));
+      if (imgMatches.length > 0) {
+        const imageUrls = imgMatches.map(m => m[1]);
+        blocks.push({ type: 'image_grid', images: imageUrls });
+      } else {
+        const rowMatches = Array.from(content.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi));
+        let headers: string[] = [];
+        const rows: string[][] = [];
+        rowMatches.forEach((rm, idx) => {
+          const isThRow = /<th[^>]*>/i.test(rm[1]);
+          const cellMatches = Array.from(rm[1].matchAll(/<t[hd][^>]*>([\s\S]*?)<\/t[hd]>/gi));
+          const cells = cellMatches.map(c => decodeEntities(c[1].replace(/<[^>]+>/g, '')).trim());
+          if (cells.length === 0) return;
+          if (idx === 0 && (isThRow || /<thead>/i.test(content) || /^(specification|parameter|attribute|feature|name|item)s?$/i.test(cells[0]))) {
+            headers = cells;
+          } else {
+            rows.push(cells);
+          }
+        });
+        if (headers.length > 0 || rows.length > 0) {
+          blocks.push({ type: 'table', headers, rows });
+        }
+      }
+    } else if (tag === 'img' || standaloneImgSrc) {
       const imgSrc = standaloneImgSrc || content.match(/src=["']([^"']+)["']/i)?.[1];
       if (imgSrc) {
         blocks.push({ type: 'image', src: imgSrc });
@@ -206,7 +298,7 @@ function parseHtmlToBlocks(html: string): BlockType[] {
 
   // Fallback if no HTML tags were detected (plain text)
   if (!hasParsedBlocks) {
-    const lines = cleanedHtml.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    const lines = normalizedHtml.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     lines.forEach(line => {
       const ytId = extractYouTubeId(line);
       if (ytId) {
@@ -223,13 +315,22 @@ function parseHtmlToBlocks(html: string): BlockType[] {
 }
 
 export const RichText: React.FC<RichTextProps> = ({ html, style, baseTextStyle }) => {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const [zoomVisible, setZoomVisible] = useState(false);
+  const [zoomImages, setZoomImages] = useState<string[]>([]);
+  const [zoomIndex, setZoomIndex] = useState(0);
 
   if (!html || html.trim() === '') {
     return null;
   }
 
   const blocks = parseHtmlToBlocks(html);
+
+  const handleOpenZoom = (images: string[], index = 0) => {
+    setZoomImages(images);
+    setZoomIndex(index);
+    setZoomVisible(true);
+  };
 
   return (
     <View style={[styles.container, style]}>
@@ -262,9 +363,14 @@ export const RichText: React.FC<RichTextProps> = ({ html, style, baseTextStyle }
 
         if (block.type === 'image') {
           return (
-            <View key={idx} style={styles.imageWrapper}>
-              <Image source={{ uri: block.src }} style={styles.embeddedImage} resizeMode="cover" />
-            </View>
+            <TouchableOpacity
+              key={idx}
+              style={[styles.imageWrapper, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0' }]}
+              onPress={() => handleOpenZoom([block.src])}
+              activeOpacity={0.9}
+            >
+              <Image source={{ uri: block.src }} style={styles.embeddedImage} resizeMode="contain" />
+            </TouchableOpacity>
           );
         }
 
@@ -272,9 +378,17 @@ export const RichText: React.FC<RichTextProps> = ({ html, style, baseTextStyle }
           return (
             <View key={idx} style={styles.gridContainer}>
               {block.images.map((imgUri, imgIdx) => (
-                <View key={imgIdx} style={styles.gridItem}>
+                <TouchableOpacity
+                  key={imgIdx}
+                  style={[styles.gridItem, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0' }]}
+                  onPress={() => handleOpenZoom(block.images, imgIdx)}
+                  activeOpacity={0.85}
+                >
                   <Image source={{ uri: imgUri }} style={styles.gridImage} resizeMode="cover" />
-                </View>
+                  <View style={styles.gridZoomIcon}>
+                    <Ionicons name="expand" size={12} color="#FFFFFF" />
+                  </View>
+                </TouchableOpacity>
               ))}
             </View>
           );
@@ -341,8 +455,91 @@ export const RichText: React.FC<RichTextProps> = ({ html, style, baseTextStyle }
           );
         }
 
+        if (block.type === 'table') {
+          return (
+            <View
+              key={idx}
+              style={[
+                styles.tableContainer,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              {block.headers.length > 0 && (
+                <View
+                  style={[
+                    styles.tableHeaderRow,
+                    {
+                      backgroundColor: isDark ? '#1E293B' : '#F1F5F9',
+                      borderBottomColor: colors.border,
+                    },
+                  ]}
+                >
+                  {block.headers.map((h, hIdx) => (
+                    <Text
+                      key={`h-${hIdx}`}
+                      style={[
+                        styles.tableHeaderCell,
+                        { color: colors.text },
+                        hIdx === 0 && { width: '42%' },
+                        hIdx > 0 && { flex: 1 },
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {h}
+                    </Text>
+                  ))}
+                </View>
+              )}
+
+              {block.rows.map((row, rIdx) => {
+                const isEven = rIdx % 2 === 0;
+                const isLast = rIdx === block.rows.length - 1;
+                return (
+                  <View
+                    key={`r-${rIdx}`}
+                    style={[
+                      styles.tableRow,
+                      {
+                        backgroundColor: isEven
+                          ? colors.surface
+                          : (isDark ? '#162032' : '#F8FAFC'),
+                        borderBottomColor: colors.border,
+                        borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
+                      },
+                    ]}
+                  >
+                    {row.map((cell, cIdx) => (
+                      <Text
+                        key={`c-${rIdx}-${cIdx}`}
+                        style={[
+                          styles.tableCell,
+                          cIdx === 0
+                            ? [styles.tableKeyCell, { color: colors.text, width: '42%' }]
+                            : [styles.tableValCell, { color: colors.textSecondary, flex: 1 }],
+                        ]}
+                      >
+                        {cell}
+                      </Text>
+                    ))}
+                  </View>
+                );
+              })}
+            </View>
+          );
+        }
+
         return null;
       })}
+
+      <ImageZoomModal
+        visible={zoomVisible}
+        images={zoomImages}
+        initialIndex={zoomIndex}
+        onClose={() => setZoomVisible(false)}
+      />
     </View>
   );
 };
@@ -463,6 +660,53 @@ const styles = StyleSheet.create({
   },
   videoSub: {
     fontSize: 11,
+  },
+  gridZoomIcon: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tableContainer: {
+    borderWidth: 1,
+    borderRadius: RADIUS.md,
+    overflow: 'hidden',
+    marginVertical: SPACING.sm + 4,
+  },
+  tableHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+  },
+  tableHeaderCell: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  tableCell: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  tableKeyCell: {
+    fontWeight: '700',
+    paddingRight: 8,
+  },
+  tableValCell: {
+    fontWeight: '400',
   },
 });
 

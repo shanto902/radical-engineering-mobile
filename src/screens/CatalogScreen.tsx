@@ -29,10 +29,11 @@ type SortOption = 'default' | 'price_asc' | 'price_desc';
 export const CatalogScreen: React.FC<CatalogScreenProps> = ({ navigation, route }) => {
   const { colors, isDark } = useTheme();
   const initialCat = route.params?.categoryId || 'all';
+  const initialBrand = route.params?.brand || 'all';
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCat);
-  const [selectedBrand, setSelectedBrand] = useState<string>('all');
+  const [selectedBrand, setSelectedBrand] = useState<string>(initialBrand);
   const [sortBy, setSortBy] = useState<SortOption>('default');
   const [searchQuery, setSearchQuery] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
@@ -47,6 +48,12 @@ export const CatalogScreen: React.FC<CatalogScreenProps> = ({ navigation, route 
       setSelectedCategory(route.params.categoryId);
     }
   }, [route.params?.categoryId]);
+
+  useEffect(() => {
+    if (route.params?.brand) {
+      setSelectedBrand(route.params.brand);
+    }
+  }, [route.params?.brand]);
 
   useEffect(() => {
     fetchProducts();
@@ -67,14 +74,25 @@ export const CatalogScreen: React.FC<CatalogScreenProps> = ({ navigation, route 
         brandsSet.add(p.brand);
       }
     });
+    if (selectedBrand !== 'all' && !brandsSet.has(selectedBrand)) {
+      brandsSet.add(selectedBrand);
+    }
     return ['all', ...Array.from(brandsSet)];
-  }, [products]);
+  }, [products, selectedBrand]);
 
   // Filter and sort products
   const displayedProducts = useMemo(() => {
     let list = [...products];
     if (selectedBrand !== 'all') {
-      list = list.filter(p => p.brand.toLowerCase() === selectedBrand.toLowerCase());
+      const lowerBrand = selectedBrand.toLowerCase().trim();
+      list = list.filter(p => {
+        const prodBrand = (p.brand || '').toLowerCase().trim();
+        return (
+          prodBrand === lowerBrand ||
+          prodBrand.includes(lowerBrand) ||
+          lowerBrand.includes(prodBrand)
+        );
+      });
     }
     if (sortBy === 'price_asc') {
       list.sort((a, b) => a.price - b.price);
@@ -139,7 +157,7 @@ export const CatalogScreen: React.FC<CatalogScreenProps> = ({ navigation, route 
       </View>
 
       {/* Secondary Filter: Brands Strip */}
-      {availableBrands.length > 2 && (
+      {availableBrands.length > 1 && (
         <View style={styles.brandsWrapper}>
           <ScrollView
             horizontal

@@ -24,7 +24,7 @@ export interface Product {
   images?: string[];
   wattage?: string;
   voltage?: string;
-  warranty: string;
+  warranty?: string;
   description: string;
   rawDescription?: string;
   shortDescription?: string;
@@ -183,5 +183,39 @@ export interface CartItem {
   product: Product;
   quantity: number;
   customPackage?: SystemBuilderResults;
+}
+
+export interface GoogleReview {
+  id: string;
+  authorName: string;
+  authorAvatar?: string;
+  rating: number;
+  text: string;
+  publishedAt?: string;
+}
+
+export interface GoogleReviewsSummary {
+  rating: number;
+  totalReviews: number;
+  writeAReviewUrl?: string;
+  reviews: GoogleReview[];
+}
+
+export interface BannerItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  tag: string;
+  cta: string;
+  image: string;
+  buttonLink?: string;
+  targetScreen?: string;
+}
+
+export interface BrandPartner {
+  id: string;
+  name: string;
+  logo?: string;
+  link?: string;
 }
 

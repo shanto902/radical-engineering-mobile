@@ -33,6 +33,9 @@ export const APP_CONFIG = {
   operatingHours: 'Saturday - Thursday: 9:00 AM - 8:00 PM',
   facebookUrl: 'https://www.facebook.com/radical.engineering.bd',
   youtubeUrl: 'https://www.youtube.com/@RadicalEngineeringBD',
+  developerName: 'Ashik Ali Shanto',
+  developerRole: 'Full-Stack Software Engineer & System Architect',
+  developerLinkedIn: 'https://www.linkedin.com/in/shanto902/',
   currency: '৳',
   currencyCode: 'BDT',
 };

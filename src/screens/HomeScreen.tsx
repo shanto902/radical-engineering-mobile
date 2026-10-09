@@ -8,6 +8,7 @@ import {
   Image,
   RefreshControl,
   Linking,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Header } from '../components/Header';
@@ -17,8 +18,8 @@ import { QuickActionCard } from '../components/QuickActionCard';
 import { ProductCard } from '../components/ProductCard';
 import { ProductCardSkeleton } from '../components/Skeleton';
 import { useTheme } from '../context/ThemeContext';
-import { apiService } from '../services/api';
-import { Product, Category, Project } from '../types';
+import { apiService, FALLBACK_BRANDS } from '../services/api';
+import { Product, Category, Project, GoogleReviewsSummary, BannerItem, BrandPartner } from '../types';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
 import { APP_CONFIG } from '../constants/config';
 
@@ -26,36 +27,56 @@ interface HomeScreenProps {
   navigation: any;
 }
 
-const AUTHORIZED_BRANDS = [
-  'Growatt',
-  'Solis',
-  'Longi',
-  'Volvo Battery',
-  'Trina Solar',
-  'JA Solar',
-  'Huawei',
-  'Rahimafrooz',
-];
-
 export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const { colors, isDark } = useTheme();
   const [categories, setCategories] = useState<Category[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [selectedHomeCat, setSelectedHomeCat] = useState<string>('all');
   const [projects, setProjects] = useState<Project[]>([]);
+  const [banners, setBanners] = useState<BannerItem[]>([]);
+  const [brands, setBrands] = useState<BrandPartner[]>(FALLBACK_BRANDS);
+  const [reviewsData, setReviewsData] = useState<GoogleReviewsSummary | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingProducts, setLoadingProducts] = useState(true);
 
   const loadData = async () => {
     try {
-      const [cats, prods, projs] = await Promise.all([
+      const [cats, prods, projs, reviews, sliders, brandList] = await Promise.all([
         apiService.getCategories(),
         apiService.getProducts(),
         apiService.getProjects(),
+        apiService.getGoogleReviews(),
+        apiService.getSliders(),
+        apiService.getBrands(),
       ]);
       setCategories(cats);
       setAllProducts(prods);
-      setProjects(projs.slice(0, 3));
+      if (brandList && brandList.length > 0) {
+        setBrands(brandList);
+      }
+
+      const sortedProjs = [...projs].sort((a, b) => {
+        const timeA = a.dateCreated
+          ? new Date(a.dateCreated).getTime()
+          : (a.date && a.date !== 'Recent' ? new Date(a.date).getTime() : 0);
+        const timeB = b.dateCreated
+          ? new Date(b.dateCreated).getTime()
+          : (b.date && b.date !== 'Recent' ? new Date(b.date).getTime() : 0);
+        if (!isNaN(timeA) && !isNaN(timeB) && timeA !== timeB && timeA > 0 && timeB > 0) {
+          return timeB - timeA;
+        }
+        const numA = Number(a.id);
+        const numB = Number(b.id);
+        if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+          return numB - numA;
+        }
+        return (b.sort ?? 0) - (a.sort ?? 0);
+      });
+      setProjects(sortedProjs.slice(0, 3));
+      setReviewsData(reviews);
+      if (sliders && sliders.length > 0) {
+        setBanners(sliders);
+      }
     } catch {
       // offline fallback
     } finally {
@@ -71,6 +92,61 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     setRefreshing(true);
     await loadData();
     setRefreshing(false);
+  };
+
+  const handleBannerPress = (banner: BannerItem) => {
+    const rawLink = (banner.buttonLink || '').trim();
+
+    if (!rawLink) {
+      if (banner.targetScreen) {
+        navigation.navigate(banner.targetScreen);
+      } else {
+        navigation.navigate('Catalog');
+      }
+      return;
+    }
+
+    // Handle external links
+    if (rawLink.startsWith('http://') || rawLink.startsWith('https://')) {
+      const siteBase = (APP_CONFIG.website || 'https://radicalengineering.com.bd').replace(/\/+$/, '');
+      if (!rawLink.startsWith(siteBase)) {
+        Linking.openURL(rawLink);
+        return;
+      }
+    }
+
+    // Extract path: e.g. "/categories/solar-panels" -> last part is "solar-panels"
+    const cleanPath = rawLink.replace(/^https?:\/\/[^\/]+/, '').replace(/\/+$/, '');
+    const segments = cleanPath.split('/').filter(Boolean);
+    const lastPart = (segments[segments.length - 1] || '').toLowerCase().trim();
+
+    if (cleanPath.includes('categories') || cleanPath.startsWith('/categories')) {
+      // e.g. /categories/solar-panels -> navigate to Catalog with categoryId: 'solar-panels'
+      navigation.navigate('Catalog', { categoryId: lastPart || 'all' });
+    } else if (cleanPath.includes('products') || cleanPath.startsWith('/products')) {
+      // e.g. /products/sku-123
+      navigation.navigate('ProductDetail', { id: lastPart });
+    } else if (lastPart === 'calculator' || lastPart === 'roof-planner' || lastPart === 'solar-calculator') {
+      navigation.navigate('RoofPlanner');
+    } else if (lastPart === 'system-builder' || lastPart === 'builder' || lastPart === 'ips-builder') {
+      navigation.navigate('SystemBuilder');
+    } else if (cleanPath.includes('projects') || cleanPath.startsWith('/projects') || lastPart === 'field-installation' || lastPart === 'installations') {
+      if (lastPart !== 'projects' && lastPart !== 'field-installation' && lastPart !== 'installations') {
+        navigation.navigate('Projects', { projectId: lastPart });
+      } else {
+        navigation.navigate('Projects');
+      }
+    } else if (lastPart === 'contact' || lastPart === 'support') {
+      navigation.navigate('Contact');
+    } else if (lastPart === 'tracker' || lastPart === 'order-tracker') {
+      navigation.navigate('OrderTracker');
+    } else if (lastPart === 'elearning' || lastPart === 'education') {
+      navigation.navigate('ELearning');
+    } else if (lastPart) {
+      navigation.navigate('Catalog', { categoryId: lastPart });
+    } else {
+      navigation.navigate('Catalog');
+    }
   };
 
   const filteredFeatured = selectedHomeCat === 'all'
@@ -90,9 +166,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
       >
         {/* Hero Banner Carousel */}
         <BannerSlider
-          onBannerPress={(targetScreen) => {
-            if (targetScreen) navigation.navigate(targetScreen);
-          }}
+          banners={banners}
+          onBannerPress={handleBannerPress}
         />
 
         {/* Value Proposition Highlights Strip */}
@@ -161,17 +236,31 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             AUTHORIZED EQUIPMENT PARTNERS
           </Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.brandsScroll}>
-            {AUTHORIZED_BRANDS.map((brandName) => (
-              <View
-                key={brandName}
+            {brands.map((brand) => (
+              <TouchableOpacity
+                key={brand.id || brand.name}
+                activeOpacity={0.7}
+                onPress={() => navigation.navigate('Catalog', { brand: brand.name, categoryId: 'all' })}
                 style={[
                   styles.brandChip,
                   { backgroundColor: colors.surface, borderColor: colors.border },
                 ]}
               >
-                <Ionicons name="checkmark-circle" size={14} color={colors.primary} />
-                <Text style={[styles.brandChipText, { color: colors.text }]}>{brandName}</Text>
-              </View>
+                {brand.logo ? (
+                  <View style={styles.brandLogoWrap}>
+                    <Image
+                      source={{ uri: brand.logo }}
+                      style={styles.brandLogo}
+                      resizeMode="contain"
+                    />
+                  </View>
+                ) : (
+                  <View style={[styles.brandLogoWrap, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}>
+                    <Ionicons name="shield-checkmark" size={13} color={colors.primary} />
+                  </View>
+                )}
+                <Text style={[styles.brandChipText, { color: colors.text }]}>{brand.name}</Text>
+              </TouchableOpacity>
             ))}
           </ScrollView>
         </View>
@@ -288,24 +377,102 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           </View>
         </View>
 
-        {/* Customer Reviews & Google Rating Card */}
-        <View style={[styles.reviewsCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={styles.reviewsHeaderRow}>
-            <View style={styles.googleBadge}>
-              <Ionicons name="logo-google" size={18} color="#EA4335" />
-              <Text style={styles.googleRatingText}>4.9 ★★★★★</Text>
+        {/* Customer Reviews & Google Rating Section */}
+        {reviewsData && reviewsData.reviews.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionHeaderLeft}>
+                <View style={styles.googleTitleRow}>
+                  <Ionicons name="logo-google" size={18} color="#EA4335" />
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>Google Reviews</Text>
+                  <View style={styles.ratingPill}>
+                    <Text style={styles.ratingPillText}>{reviewsData.rating.toFixed(1)} ★</Text>
+                  </View>
+                </View>
+                <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
+                  {reviewsData.totalReviews} verified reviews from real customers
+                </Text>
+              </View>
+
+              {reviewsData.writeAReviewUrl && (
+                <TouchableOpacity
+                  style={styles.writeReviewBtn}
+                  onPress={() => Linking.openURL(reviewsData.writeAReviewUrl!)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="create-outline" size={14} color={colors.primary} />
+                  <Text style={[styles.writeReviewText, { color: colors.primary }]}>Review Us</Text>
+                </TouchableOpacity>
+              )}
             </View>
-            <Text style={[styles.googleVerified, { color: colors.textSecondary }]}>
-              Verified Customer Rating
-            </Text>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.reviewsScrollContent}
+              decelerationRate="fast"
+              snapToInterval={296}
+            >
+              {reviewsData.reviews.map((rev) => (
+                <View
+                  key={rev.id}
+                  style={[
+                    styles.reviewCard,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      shadowColor: colors.cardShadow,
+                    },
+                  ]}
+                >
+                  <View style={styles.reviewCardHeader}>
+                    {rev.authorAvatar ? (
+                      <Image source={{ uri: rev.authorAvatar }} style={styles.reviewAvatar} />
+                    ) : (
+                      <View style={[styles.reviewAvatarFallback, { backgroundColor: isDark ? '#334155' : '#E2E8F0' }]}>
+                        <Text style={[styles.avatarInitial, { color: colors.text }]}>
+                          {rev.authorName ? rev.authorName.charAt(0).toUpperCase() : 'U'}
+                        </Text>
+                      </View>
+                    )}
+                    <View style={styles.reviewAuthorCol}>
+                      <Text style={[styles.reviewAuthorName, { color: colors.text }]} numberOfLines={1}>
+                        {rev.authorName}
+                      </Text>
+                      <View style={styles.starsRow}>
+                        {[...Array(5)].map((_, i) => (
+                          <Ionicons
+                            key={i}
+                            name={i < rev.rating ? 'star' : 'star-outline'}
+                            size={12}
+                            color="#F59E0B"
+                          />
+                        ))}
+                        {rev.publishedAt ? (
+                          <Text style={[styles.reviewDateText, { color: colors.textMuted }]}>
+                            • {rev.publishedAt}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+                    <Ionicons name="checkmark-circle" size={16} color="#15803D" />
+                  </View>
+
+                  <Text style={[styles.reviewCardText, { color: colors.text }]} numberOfLines={4}>
+                    "{rev.text}"
+                  </Text>
+
+                  <View style={styles.reviewCardFooter}>
+                    <Ionicons name="logo-google" size={12} color={colors.textMuted} />
+                    <Text style={[styles.reviewFooterText, { color: colors.textMuted }]}>
+                      Google Verified Customer
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
           </View>
-          <Text style={[styles.testimonialQuote, { color: colors.text }]}>
-            "Radical Engineering installed our 3.5kW hybrid solar system in Kishoreganj. Their calculation of our fan and fridge load was pinpoint accurate, saving over 70% on electricity bills."
-          </Text>
-          <Text style={[styles.testimonialAuthor, { color: colors.textMuted }]}>
-            — Engr. Rafiqul Islam, Station Road, Kishoreganj
-          </Text>
-        </View>
+        )}
 
         {/* Recent Installation Projects */}
         <View style={styles.section}>
@@ -329,13 +496,31 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             <TouchableOpacity
               key={project.id}
               activeOpacity={0.85}
-              onPress={() => navigation.navigate('Projects')}
+              onPress={() => navigation.navigate('Projects', { projectId: project.id })}
               style={[
                 styles.projectCard,
                 { backgroundColor: colors.surface, borderColor: colors.border },
               ]}
             >
-              <Image source={{ uri: project.image }} style={styles.projectImage} resizeMode="cover" />
+              <View style={[styles.projectImageContainer, { backgroundColor: isDark ? '#0F172A' : '#1E293B' }]}>
+                <Image
+                  source={{ uri: project.image }}
+                  style={styles.projectImageBackdrop}
+                  resizeMode="cover"
+                  blurRadius={Platform.OS === 'android' ? 12 : 22}
+                />
+                <View
+                  style={[
+                    styles.projectImageOverlay,
+                    { backgroundColor: isDark ? 'rgba(0, 0, 0, 0.45)' : 'rgba(0, 0, 0, 0.25)' },
+                  ]}
+                />
+                <Image
+                  source={{ uri: project.image }}
+                  style={styles.projectImageForeground}
+                  resizeMode="contain"
+                />
+              </View>
               <View style={styles.projectContent}>
                 <View style={styles.projectHeaderRow}>
                   <View style={[styles.capacityBadge, { backgroundColor: isDark ? 'rgba(252, 185, 116, 0.15)' : '#F5EBE6' }]}>
@@ -357,43 +542,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               </View>
             </TouchableOpacity>
           ))}
-        </View>
-
-        {/* Company Profile Footer */}
-        <View style={[styles.footerContainer, { backgroundColor: colors.surfaceVariant }]}>
-          <View style={styles.footerBrandRow}>
-            <View style={[styles.footerLogoBadge, { backgroundColor: colors.primary }]}>
-              <Ionicons name="sunny" size={24} color={isDark ? '#260B00' : '#FFFFFF'} />
-            </View>
-            <View>
-              <Text style={[styles.footerTitle, { color: colors.text }]}>{APP_CONFIG.companyName}</Text>
-              <Text style={[styles.footerTagline, { color: colors.textSecondary }]}>
-                {APP_CONFIG.tagline}
-              </Text>
-            </View>
-          </View>
-
-          <Text style={[styles.footerAddress, { color: colors.textSecondary }]}>
-            📍 {APP_CONFIG.address}
-          </Text>
-
-          <View style={styles.footerLinksRow}>
-            <TouchableOpacity onPress={() => Linking.openURL(APP_CONFIG.website)}>
-              <Text style={[styles.footerLink, { color: colors.primary }]}>Website</Text>
-            </TouchableOpacity>
-            <Text style={{ color: colors.textMuted }}>•</Text>
-            <TouchableOpacity onPress={() => Linking.openURL(APP_CONFIG.facebookUrl)}>
-              <Text style={[styles.footerLink, { color: colors.primary }]}>Facebook</Text>
-            </TouchableOpacity>
-            <Text style={{ color: colors.textMuted }}>•</Text>
-            <TouchableOpacity onPress={() => Linking.openURL(APP_CONFIG.youtubeUrl)}>
-              <Text style={[styles.footerLink, { color: colors.primary }]}>YouTube</Text>
-            </TouchableOpacity>
-          </View>
-
-          <Text style={[styles.copyrightText, { color: colors.textMuted }]}>
-            © 2026 Radical Engineering. Developed by Ashik Ali Shanto.
-          </Text>
         </View>
 
         <View style={{ height: 40 }} />
@@ -477,14 +625,31 @@ const styles = StyleSheet.create({
   brandChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingLeft: 5,
+    paddingRight: 12,
+    paddingVertical: 5,
     borderRadius: RADIUS.full,
     borderWidth: 1,
-    gap: 5,
+    gap: 7,
+  },
+  brandLogoWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    padding: 2,
+    borderWidth: 0.5,
+    borderColor: 'rgba(0,0,0,0.06)',
+  },
+  brandLogo: {
+    width: 20,
+    height: 20,
   },
   brandChipText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
   },
   categoryGrid: {
@@ -536,41 +701,111 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
-  reviewsCard: {
-    marginHorizontal: SPACING.md,
-    marginTop: SPACING.md,
-    padding: SPACING.md,
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
-  },
-  reviewsHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  googleBadge: {
+  googleTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  googleRatingText: {
-    fontSize: 13,
+  ratingPill: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: RADIUS.full,
+    marginLeft: 4,
+  },
+  ratingPillText: {
+    fontSize: 11,
     fontWeight: '800',
-    color: '#EA4335',
+    color: '#D97706',
   },
-  googleVerified: {
-    fontSize: 11,
-    fontWeight: '500',
+  writeReviewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+    gap: 4,
   },
-  testimonialQuote: {
+  writeReviewText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  reviewsScrollContent: {
+    paddingLeft: SPACING.md,
+    paddingRight: SPACING.xs,
+    paddingVertical: 4,
+  },
+  reviewCard: {
+    width: 280,
+    marginRight: SPACING.md,
+    padding: SPACING.md,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    justifyContent: 'space-between',
+  },
+  reviewCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  reviewAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: 10,
+    backgroundColor: '#E2E8F0',
+  },
+  reviewAvatarFallback: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitial: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  reviewAuthorCol: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  reviewAuthorName: {
     fontSize: 13,
-    lineHeight: 18,
-    fontStyle: 'italic',
-    marginBottom: 6,
+    fontWeight: '700',
+    lineHeight: 16,
   },
-  testimonialAuthor: {
-    fontSize: 11,
+  starsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginTop: 2,
+  },
+  reviewDateText: {
+    fontSize: 10,
+    marginLeft: 4,
+  },
+  reviewCardText: {
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 10,
+    fontStyle: 'italic',
+  },
+  reviewCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(150, 150, 150, 0.2)',
+    paddingTop: 6,
+  },
+  reviewFooterText: {
+    fontSize: 10,
     fontWeight: '600',
   },
   projectCard: {
@@ -579,10 +814,35 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: SPACING.sm + 4,
   },
-  projectImage: {
+  projectImageContainer: {
     width: '100%',
-    height: 140,
-    backgroundColor: '#E2E8F0',
+    height: 150,
+    position: 'relative',
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  projectImageBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    opacity: 0.85,
+    transform: [{ scale: 1.15 }],
+  },
+  projectImageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  projectImageForeground: {
+    width: '100%',
+    height: '100%',
   },
   projectContent: {
     padding: SPACING.md - 2,
@@ -619,54 +879,5 @@ const styles = StyleSheet.create({
   },
   locationText: {
     fontSize: 12,
-  },
-  footerContainer: {
-    marginHorizontal: SPACING.md,
-    marginTop: SPACING.xl,
-    padding: SPACING.lg,
-    borderRadius: RADIUS.lg,
-    alignItems: 'center',
-  },
-  footerBrandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm,
-  },
-  footerLogoBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: RADIUS.sm,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  footerTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  footerTagline: {
-    fontSize: 11,
-    maxWidth: 220,
-  },
-  footerAddress: {
-    fontSize: 12,
-    textAlign: 'center',
-    lineHeight: 18,
-    marginBottom: SPACING.md,
-  },
-  footerLinksRow: {
-    flexDirection: 'row',
-    gap: SPACING.md,
-    marginBottom: SPACING.md,
-  },
-  footerLink: {
-    color: COLORS.primary,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  copyrightText: {
-    fontSize: 10,
-    textAlign: 'center',
   },
 });

@@ -1,7 +1,7 @@
 import { createDirectus, rest, staticToken, readItems, readItem, createItem, createItems } from '@directus/sdk';
 import { APP_CONFIG } from '../constants/config';
 import { CATEGORIES, PRODUCTS, PROJECTS, ELEARNING_ARTICLES, SAMPLE_ORDERS } from '../constants/mockData';
-import { Product, ProductDoc, Category, Project, ELearningArticle, Order, TrackedOrder, TrackedOrderItem } from '../types';
+import { Product, ProductDoc, Category, Project, ELearningArticle, Order, TrackedOrder, TrackedOrderItem, GoogleReview, GoogleReviewsSummary, BannerItem, BrandPartner } from '../types';
 
 export interface CreateOrderItem {
   id: string;
@@ -39,18 +39,48 @@ export const directus = createDirectus(APP_CONFIG.apiBaseUrl)
  */
 function cleanHtml(html: string | null | undefined): string {
   if (!html) return '';
-  return html
+  let str = html
     .replace(/<br\s*[\/]?>/gi, '\n')
     .replace(/<\/p>/gi, '\n\n')
     .replace(/<\/li>/gi, '\n')
     .replace(/<li[^>]*>/gi, '• ')
     .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+
+  // Multi-pass entity decoding (handles double-encoded entities like &amp;deg; &amp;lt;)
+  for (let i = 0; i < 2; i++) {
+    str = str
+      .replace(/&#(\d+);/g, (match, dec) => {
+        try { return String.fromCodePoint(parseInt(dec, 10)); } catch { return match; }
+      })
+      .replace(/&#x([0-9a-fA-F]+);/g, (match, hex) => {
+        try { return String.fromCodePoint(parseInt(hex, 16)); } catch { return match; }
+      })
+      .replace(/&deg;?/gi, '°')
+      .replace(/&plusmn;?/gi, '±')
+      .replace(/&micro;?/gi, 'µ')
+      .replace(/&Omega;?/g, 'Ω')
+      .replace(/&omega;?/g, 'ω')
+      .replace(/&times;?/gi, '×')
+      .replace(/&divide;?/gi, '÷')
+      .replace(/&le;?/gi, '≤')
+      .replace(/&ge;?/gi, '≥')
+      .replace(/&ne;?/gi, '≠')
+      .replace(/&nbsp;?/gi, ' ')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&#60;/gi, '<')
+      .replace(/&#62;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
+      .replace(/&apos;/gi, "'")
+      .replace(/&bull;/gi, '•')
+      .replace(/&mdash;/gi, '—')
+      .replace(/&ndash;/gi, '–')
+      .replace(/&amp;/gi, '&');
+  }
+  return str.trim();
 }
 
 /**
@@ -167,11 +197,19 @@ class ApiService {
     const brandName = this.brandsMap[item.brand] || (typeof item.brand === 'string' ? item.brand : 'Radical Engineering');
     const catInfo = this.categoriesMap[item.category] || { id: 1, name: 'Solar Equipment', slug: 'solar-panels' };
 
-    const rawDesc = item.short_description || item.description || '';
-    const cleanDesc = cleanHtml(rawDesc);
+    const richDescription = (item.description && String(item.description).trim())
+      ? String(item.description)
+      : (item.short_description || '');
+    const cleanDesc = cleanHtml(richDescription);
+
+    const richShortDesc = (item.short_description && String(item.short_description).trim())
+      ? String(item.short_description).trim()
+      : undefined;
+    const shortDesc = richShortDesc || (cleanDesc.length > 160 ? `${cleanDesc.slice(0, 160)}...` : cleanDesc);
+
     const featuresList = (Array.isArray(item.features) && item.features.length > 0)
       ? item.features
-      : extractFeatures(cleanDesc);
+      : [];
 
     const extractedW = extractWattage(item.name || item.title || '');
     const regularPrice = Number(item.price) || 0;
@@ -179,20 +217,23 @@ class ApiService {
     const finalPrice = discountedPrice && discountedPrice < regularPrice ? discountedPrice : regularPrice;
     const originalPrice = discountedPrice && discountedPrice < regularPrice ? regularPrice : undefined;
 
-    // Build rich technical specifications map
+    // Technical specifications map - only add verified attributes
     const specsMap: Record<string, string> = {};
     if (brandName) specsMap['Brand'] = brandName;
     if (item.sku) specsMap['Model / SKU'] = item.sku;
     specsMap['Category'] = catInfo.name;
     if (item.sub_category) specsMap['Sub-Category'] = item.sub_category;
-    if (extractedW) specsMap['Capacity / Rating'] = extractedW;
-    specsMap['Warranty'] = item.warranty ? `${item.warranty} Warranty` : 'Official Radical Warranty';
-    specsMap['Stock Status'] = item.status === 'in-stock' ? 'Available in Stock' : (item.status || 'In Stock');
-
-    // Look for voltage mention
-    if (item.name?.includes('12V') || cleanDesc.includes('12V')) specsMap['Nominal Voltage'] = '12V DC';
-    else if (item.name?.includes('24V') || cleanDesc.includes('24V')) specsMap['Nominal Voltage'] = '24V DC';
-    else if (item.name?.includes('48V') || cleanDesc.includes('48V')) specsMap['Nominal Voltage'] = '48V DC';
+    let formattedWarranty: string | undefined = undefined;
+    if (item.warranty && String(item.warranty).trim()) {
+      const w = String(item.warranty).trim();
+      formattedWarranty = w.toLowerCase().includes('warrant') || w.toLowerCase().includes('warrent')
+        ? w
+        : `${w} Warranty`;
+      specsMap['Warranty'] = formattedWarranty;
+    }
+    specsMap['Stock Status'] = item.status === 'in-stock'
+      ? 'Available in Stock'
+      : (item.status === 'out-of-stock' ? 'Out of Stock' : (item.status || 'In Stock'));
 
     const datasheetDoc = parseDocument(item.datasheet, 'Technical Datasheet', 'datasheet', this.assetsUrl);
     const manualDoc = parseDocument(item.user_manual, 'User Manual', 'manual', this.assetsUrl);
@@ -204,6 +245,32 @@ class ApiService {
     if (manualDoc) {
       docList.push(manualDoc);
       specsMap['User Manual (PDF)'] = manualDoc.filename || 'Available';
+    }
+
+    const mainImgUrl = item.image ? `${this.assetsUrl}/${item.image}` : PRODUCTS[0].image;
+    const galleryUrls: string[] = [];
+    if (mainImgUrl) {
+      galleryUrls.push(mainImgUrl);
+    }
+    if (Array.isArray(item.image_gallery)) {
+      item.image_gallery.forEach((g: any) => {
+        let fileId: string | undefined;
+        if (typeof g === 'string') {
+          fileId = g;
+        } else if (g && typeof g.directus_files_id === 'string') {
+          fileId = g.directus_files_id;
+        } else if (g && typeof g.directus_files_id === 'object' && g.directus_files_id?.id) {
+          fileId = String(g.directus_files_id.id);
+        } else if (g && typeof g.id === 'string' && !g.directus_files_id) {
+          fileId = g.id;
+        }
+        if (fileId) {
+          const url = `${this.assetsUrl}/${fileId}`;
+          if (!galleryUrls.includes(url)) {
+            galleryUrls.push(url);
+          }
+        }
+      });
     }
 
     return {
@@ -220,26 +287,20 @@ class ApiService {
         ? Math.round(((originalPrice - finalPrice) / originalPrice) * 100)
         : undefined,
       inStock: item.status !== 'out-of-stock',
-      rating: 4.9,
-      reviewsCount: 18 + (Math.abs(String(item.id).charCodeAt(0)) % 40),
-      image: item.image ? `${this.assetsUrl}/${item.image}` : PRODUCTS[0].image,
-      images: Array.isArray(item.image_gallery) && item.image_gallery.length > 0
-        ? [item.image ? `${this.assetsUrl}/${item.image}` : PRODUCTS[0].image]
-        : undefined,
+      rating: 5.0,
+      reviewsCount: 0,
+      image: mainImgUrl,
+      images: galleryUrls.length > 0 ? galleryUrls : [mainImgUrl],
       wattage: extractedW,
-      voltage: specsMap['Nominal Voltage'],
-      warranty: specsMap['Warranty'],
-      description: cleanDesc.length > 10 ? cleanDesc : `${item.name}. High efficiency equipment distributed and backed by Radical Engineering, Kishoreganj.`,
-      rawDescription: rawDesc.length > 5 ? rawDesc : undefined,
-      shortDescription: cleanDesc.slice(0, 160),
+      voltage: undefined,
+      warranty: formattedWarranty,
+      description: cleanDesc.length > 10 ? cleanDesc : `${item.name || 'Solar Equipment'}. Distributed and backed by Radical Engineering, Kishoreganj.`,
+      rawDescription: richDescription.length > 5 ? richDescription : undefined,
+      shortDescription: shortDesc,
       subCategory: item.sub_category,
       sku: item.sku,
       tags: item.tags || [brandName, catInfo.name],
-      features: featuresList.length > 0 ? featuresList : [
-        'Tier-1 engineering standards compliant',
-        'Official Bangladeshi warranty with on-site service support',
-        'Designed for high efficiency under local climate conditions',
-      ],
+      features: featuresList,
       specs: specsMap,
       isFeatured: true,
       datasheet: datasheetDoc,
@@ -286,7 +347,10 @@ class ApiService {
   async getProducts(categoryId?: string, search?: string): Promise<Product[]> {
     await this.loadMetadata();
     try {
-      const query: any = { limit: 100, fields: ['*', 'datasheet.*', 'user_manual.*'] };
+      const query: any = {
+        limit: 100,
+        fields: ['*', 'datasheet.*', 'user_manual.*', 'image_gallery.*', 'image_gallery.directus_files_id.*'],
+      };
 
       // Map slug or ID filter
       if (categoryId && categoryId !== 'all') {
@@ -345,7 +409,11 @@ class ApiService {
     await this.loadMetadata();
     try {
       const item: any = await Promise.race([
-        directus.request(readItem('products' as any, id as any, { fields: ['*', 'datasheet.*', 'user_manual.*'] } as any)),
+        directus.request(
+          readItem('products' as any, id as any, {
+            fields: ['*', 'datasheet.*', 'user_manual.*', 'image_gallery.*', 'image_gallery.directus_files_id.*'],
+          } as any)
+        ),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3500)),
       ]);
       if (item) {
@@ -359,13 +427,39 @@ class ApiService {
   }
 
   async getProjects(): Promise<Project[]> {
+    const sortLatestFirst = (list: Project[]) => {
+      return [...list].sort((a, b) => {
+        const timeA = a.dateCreated
+          ? new Date(a.dateCreated).getTime()
+          : (a.date && a.date !== 'Recent' ? new Date(a.date).getTime() : 0);
+        const timeB = b.dateCreated
+          ? new Date(b.dateCreated).getTime()
+          : (b.date && b.date !== 'Recent' ? new Date(b.date).getTime() : 0);
+        if (!isNaN(timeA) && !isNaN(timeB) && timeA !== timeB && timeA > 0 && timeB > 0) {
+          return timeB - timeA;
+        }
+        const numA = Number(a.id);
+        const numB = Number(b.id);
+        if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+          return numB - numA;
+        }
+        return (b.sort ?? 0) - (a.sort ?? 0);
+      });
+    };
+
     try {
       const data: any = await Promise.race([
-        directus.request(readItems('projects' as any, { limit: 30, fields: ['*'] } as any)),
+        directus.request(
+          readItems('projects' as any, {
+            limit: 30,
+            fields: ['*'],
+            sort: ['-id', '-date_created'],
+          } as any)
+        ),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 4000)),
       ]);
       if (Array.isArray(data) && data.length > 0) {
-        return data.map((item: any) => {
+        const mapped = data.map((item: any) => {
           const rawBody = item.body || '';
           const shortDesc = item.short_description || cleanHtml(rawBody).slice(0, 160);
           const cleanBody = cleanHtml(rawBody);
@@ -424,11 +518,12 @@ class ApiService {
             ],
           };
         });
+        return sortLatestFirst(mapped);
       }
     } catch {
       // Offline fallback
     }
-    return PROJECTS;
+    return sortLatestFirst(PROJECTS);
   }
 
   async getELearningArticles(): Promise<ELearningArticle[]> {
@@ -871,32 +966,435 @@ class ApiService {
   async submitInquiry(data: {
     name: string;
     phone: string;
-    address: string;
+    address?: string;
     serviceType: string;
     notes?: string;
-  }): Promise<{ success: boolean; message: string }> {
+    email?: string;
+  }): Promise<{ success: boolean; message: string; inquiryId?: number }> {
+    const cleanPhone = (data.phone || '').trim();
+    const cleanName = (data.name || '').trim();
+    const cleanService = (data.serviceType || '').trim();
+    const cleanMessage =
+      (data.notes || '').trim() ||
+      `Inquiry for ${cleanService}${data.address ? ` [Address: ${data.address}]` : ''}`;
+
     try {
-      await directus.request(
-        createItem('inquiries' as any, {
-          name: data.name,
-          phone: data.phone,
-          address: data.address,
-          service_type: data.serviceType,
-          notes: data.notes || '',
-          date_created: new Date().toISOString(),
+      // 1. Directus SDK createItem into 'messages' collection with new 'service_req' field
+      const created: any = await directus.request(
+        createItem('messages' as any, {
+          name: cleanName,
+          phone: cleanPhone,
+          service_req: cleanService,
+          message: cleanMessage,
+          email: data.email ? data.email.trim() : null,
+          status: 'published',
         } as any)
       );
+
       return {
         success: true,
+        inquiryId: created?.id ? Number(created.id) : undefined,
         message: 'আপনার অনুরোধটি Directus সার্ভারে সফলভাবে সংরক্ষিত হয়েছে। Radical Engineering প্রতিনিধি শীঘ্রই আপনার সাথে যোগাযোগ করবেন।',
       };
-    } catch {
+    } catch (directusErr: any) {
+      console.warn('Directus messages submission error:', directusErr);
+
+      // 2. Direct REST fallback to Directus /items/messages
+      try {
+        const resp = await fetch(`${APP_CONFIG.apiBaseUrl}/items/messages`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${APP_CONFIG.accessToken}`,
+          },
+          body: JSON.stringify({
+            name: cleanName,
+            phone: cleanPhone,
+            service_req: cleanService,
+            message: cleanMessage,
+            status: 'published',
+          }),
+        });
+
+        if (resp.ok) {
+          const json = await resp.json();
+          return {
+            success: true,
+            inquiryId: json?.data?.id ? Number(json.data.id) : undefined,
+            message: 'আপনার অনুরোধটি Directus সার্ভারে সফলভাবে সংরক্ষিত হয়েছে। Radical Engineering প্রতিনিধি শীঘ্রই আপনার সাথে যোগাযোগ করবেন।',
+          };
+        }
+      } catch (fetchErr) {
+        console.warn('Direct fetch messages error:', fetchErr);
+      }
+
       return {
-        success: true,
-        message: 'আপনার অনুরোধটি সফলভাবে গ্রহণ করা হয়েছে। Radical Engineering প্রতিনিধি শীঘ্রই আপনার সাথে যোগাযোগ করবেন।',
+        success: false,
+        message: 'Could not send inquiry. Please call our hotline or try again.',
       };
     }
   }
+
+  async getGoogleReviews(): Promise<GoogleReviewsSummary> {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const siteBase = (APP_CONFIG.website || 'https://radicalengineering.com.bd').replace(/\/+$/, '');
+      const res = await fetch(`${siteBase}/api/reviews`, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json' },
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const json = await res.json();
+        const widget = json.widget;
+        if (widget && Array.isArray(widget.reviews) && widget.reviews.length > 0) {
+          const mappedReviews: GoogleReview[] = widget.reviews
+            .map((r: any) => ({
+              id: String(r.id || Math.random()),
+              authorName: r.author?.name || 'Verified Customer',
+              authorAvatar: r.author?.avatarUrl || undefined,
+              rating: typeof r.rating?.value === 'number' ? r.rating.value : 5,
+              text: r.text || r.originalText || '',
+              publishedAt: r.publishedAt
+                ? new Date(r.publishedAt).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })
+                : 'Verified Customer',
+            }))
+            .filter((r: GoogleReview) => r.text.trim().length > 0);
+
+          return {
+            rating: Number(widget.gbpLocationSummary?.rating) || 5.0,
+            totalReviews: Number(widget.gbpLocationSummary?.reviewsCount) || mappedReviews.length,
+            writeAReviewUrl:
+              widget.gbpLocationSummary?.writeAReviewUri ||
+              FALLBACK_GOOGLE_REVIEWS.writeAReviewUrl,
+            reviews: mappedReviews.length > 0 ? mappedReviews : FALLBACK_GOOGLE_REVIEWS.reviews,
+          };
+        }
+      }
+    } catch {
+      // Offline fallback
+    }
+    return FALLBACK_GOOGLE_REVIEWS;
+  }
+
+  async getSliders(): Promise<BannerItem[]> {
+    try {
+      const data: any = await Promise.race([
+        directus.request(
+          readItems('sliders' as any, {
+            filter: { status: { _eq: 'published' } },
+            sort: ['sort', '-id'],
+          } as any)
+        ),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 4000)),
+      ]);
+
+      if (Array.isArray(data) && data.length > 0) {
+        return data.map((item: any) => {
+          const bodyHtml = String(item.body || '');
+          const hMatch = bodyHtml.match(/<h[1-3][^>]*>(.*?)<\/h[1-3]>/is);
+          let title = '';
+          if (hMatch && hMatch[1]) {
+            title = cleanHtml(hMatch[1]).trim();
+          }
+
+          let remaining = bodyHtml;
+          if (hMatch) {
+            remaining = bodyHtml.replace(hMatch[0], '');
+          }
+          let subtitle = cleanHtml(remaining).trim();
+
+          if (!title) {
+            const lines = cleanHtml(bodyHtml).split('\n').map(l => l.trim()).filter(Boolean);
+            title = lines[0] || 'Clean Energy Solutions';
+            subtitle = lines.slice(1).join(' ') || '';
+          }
+
+          const buttonLink = String(item.button_link || '').trim();
+          const buttonText = String(item.button_text || 'Explore Now').trim();
+
+          // Derive tag from content
+          const combined = (title + ' ' + buttonLink).toLowerCase();
+          let tag = 'CLEAN ENERGY';
+          if (combined.includes('batter')) tag = 'POWER STORAGE';
+          else if (combined.includes('solar') || combined.includes('panel')) tag = 'SOLAR ENERGY';
+          else if (combined.includes('inverter') || combined.includes('ips')) tag = 'POWER BACKUP';
+          else if (combined.includes('lps') || combined.includes('lightn')) tag = 'SAFETY SYSTEMS';
+
+          const image = item.image ? `${this.assetsUrl}/${item.image}` : FALLBACK_BANNERS[0].image;
+
+          return {
+            id: String(item.id),
+            title,
+            subtitle,
+            tag,
+            cta: buttonText,
+            image,
+            buttonLink,
+          };
+        });
+      }
+    } catch (err) {
+      console.warn('Directus sliders fetch error:', err);
+
+      // REST fallback
+      try {
+        const resp = await fetch(
+          `${APP_CONFIG.apiBaseUrl}/items/sliders?filter[status][_eq]=published&sort=sort,-id`,
+          {
+            headers: {
+              Authorization: `Bearer ${APP_CONFIG.accessToken}`,
+              Accept: 'application/json',
+            },
+          }
+        );
+        if (resp.ok) {
+          const json = await resp.json();
+          if (Array.isArray(json.data) && json.data.length > 0) {
+            return json.data.map((item: any) => {
+              const bodyHtml = String(item.body || '');
+              const hMatch = bodyHtml.match(/<h[1-3][^>]*>(.*?)<\/h[1-3]>/is);
+              let title = hMatch && hMatch[1] ? cleanHtml(hMatch[1]).trim() : '';
+              let remaining = hMatch ? bodyHtml.replace(hMatch[0], '') : bodyHtml;
+              let subtitle = cleanHtml(remaining).trim();
+              if (!title) {
+                const lines = cleanHtml(bodyHtml).split('\n').map(l => l.trim()).filter(Boolean);
+                title = lines[0] || 'Clean Energy Solutions';
+                subtitle = lines.slice(1).join(' ') || '';
+              }
+              const buttonLink = String(item.button_link || '').trim();
+              const buttonText = String(item.button_text || 'Explore Now').trim();
+              const combined = (title + ' ' + buttonLink).toLowerCase();
+              let tag = 'CLEAN ENERGY';
+              if (combined.includes('batter')) tag = 'POWER STORAGE';
+              else if (combined.includes('solar') || combined.includes('panel')) tag = 'SOLAR ENERGY';
+              else if (combined.includes('inverter') || combined.includes('ips')) tag = 'POWER BACKUP';
+              const image = item.image ? `${this.assetsUrl}/${item.image}` : FALLBACK_BANNERS[0].image;
+              return {
+                id: String(item.id),
+                title,
+                subtitle,
+                tag,
+                cta: buttonText,
+                image,
+                buttonLink,
+              };
+            });
+          }
+        }
+      } catch (fetchErr) {
+        console.warn('REST sliders fallback error:', fetchErr);
+      }
+    }
+
+    return FALLBACK_BANNERS;
+  }
+
+  /**
+   * Fetch official equipment brand partners with their logos
+   */
+  async getBrands(): Promise<BrandPartner[]> {
+    try {
+      const items = await directus.request(
+        readItems('brands' as any, {
+          fields: ['id', 'name', 'logo', 'link', 'sort'] as any,
+          sort: ['sort', 'id'] as any,
+          limit: 50,
+        })
+      );
+
+      if (Array.isArray(items) && items.length > 0) {
+        const filtered = items
+          .filter((item: any) => {
+            const name = (item.name || '').trim();
+            return name && name.toLowerCase() !== 'no brand';
+          })
+          .map((item: any): BrandPartner => ({
+            id: String(item.id),
+            name: (item.name || '').trim(),
+            logo: item.logo ? `${this.assetsUrl}/${item.logo}` : undefined,
+            link: item.link && item.link !== '#' ? item.link : undefined,
+          }));
+
+        if (filtered.length > 0) {
+          filtered.forEach((b: BrandPartner) => {
+            this.brandsMap[b.id] = b.name;
+          });
+          return filtered;
+        }
+      }
+    } catch (err) {
+      console.warn('Directus brands fetch error:', err);
+
+      // REST fallback
+      try {
+        const resp = await fetch(
+          `${APP_CONFIG.apiBaseUrl}/items/brands?limit=50&sort=sort,id`,
+          {
+            headers: {
+              Authorization: `Bearer ${APP_CONFIG.accessToken}`,
+              Accept: 'application/json',
+            },
+          }
+        );
+        if (resp.ok) {
+          const json = await resp.json();
+          if (Array.isArray(json.data) && json.data.length > 0) {
+            const filtered = json.data
+              .filter((item: any) => {
+                const name = (item.name || '').trim();
+                return name && name.toLowerCase() !== 'no brand';
+              })
+              .map((item: any): BrandPartner => ({
+                id: String(item.id),
+                name: (item.name || '').trim(),
+                logo: item.logo ? `${this.assetsUrl}/${item.logo}` : undefined,
+                link: item.link && item.link !== '#' ? item.link : undefined,
+              }));
+
+            if (filtered.length > 0) {
+              filtered.forEach((b: BrandPartner) => {
+                this.brandsMap[b.id] = b.name;
+              });
+              return filtered;
+            }
+          }
+        }
+      } catch (fetchErr) {
+        console.warn('REST brands fallback error:', fetchErr);
+      }
+    }
+
+    return FALLBACK_BRANDS;
+  }
 }
+
+export const FALLBACK_BRANDS: BrandPartner[] = [
+  {
+    id: '2',
+    name: 'Growatt',
+    logo: 'https://admin.atiar.com.bd/assets/fe980091-355e-4765-9925-8a60b5584365',
+    link: 'https://en.growatt.com/',
+  },
+  {
+    id: '4',
+    name: 'Solis',
+    logo: 'https://admin.atiar.com.bd/assets/d1c94b54-a216-47fc-ba66-3ac0fe166c2f',
+    link: 'https://www.solisinverters.com/global',
+  },
+  {
+    id: '16',
+    name: 'Longi',
+    logo: 'https://admin.atiar.com.bd/assets/649852ae-6af3-4073-81e2-006955ec0280',
+    link: 'https://www.longi.com/en/',
+  },
+  {
+    id: '3',
+    name: 'Trina Solar',
+    logo: 'https://admin.atiar.com.bd/assets/5ae1250e-886a-47d3-8b75-83cf6822dec7',
+    link: 'https://www.trinasolar.com/en-glb',
+  },
+  {
+    id: '17',
+    name: 'JA Solar',
+    logo: 'https://admin.atiar.com.bd/assets/d48c9ec8-ec9d-456b-b9d1-1af031c8f8ff',
+    link: 'https://www.jasolar.com/html/en/',
+  },
+  {
+    id: '12',
+    name: 'Huawei',
+    logo: 'https://admin.atiar.com.bd/assets/45a5f5d4-e70f-426a-8a54-c376efb5654c',
+    link: 'https://solar.huawei.com/',
+  },
+  {
+    id: '6',
+    name: 'Volvo (Panna Group)',
+    logo: 'https://admin.atiar.com.bd/assets/9ccc7d75-5814-4b06-a032-9e3c05819173',
+    link: 'https://www.pannagroupbd.com/product-category/batteries/',
+  },
+  {
+    id: '20',
+    name: 'Rahimafrooz',
+    logo: 'https://admin.atiar.com.bd/assets/b958aa5f-599f-4cf2-ad61-5d5c880b9673',
+    link: 'https://www.rahimafrooz.com/',
+  },
+  {
+    id: '21',
+    name: 'GOODWE',
+    logo: 'https://admin.atiar.com.bd/assets/643d9d75-021a-4d65-a0a0-44a7e6c26d04',
+    link: 'https://en.goodwe.com',
+  },
+];
+
+export const FALLBACK_BANNERS: BannerItem[] = [
+  {
+    id: 'b1',
+    title: 'Harness the Power of the Sun',
+    subtitle: 'High-efficiency solar panels for your home or business.',
+    tag: 'SOLAR ENERGY',
+    cta: 'Explore Solar Panels',
+    image: 'https://admin.atiar.com.bd/assets/3791e375-6479-459c-afd0-5579f41cea68',
+    buttonLink: '/categories/solar-panels',
+  },
+  {
+    id: 'b2',
+    title: 'Energy That Never Sleeps',
+    subtitle: 'Smart battery systems for day and night energy storage.',
+    tag: 'POWER STORAGE',
+    cta: 'See Batteries',
+    image: 'https://admin.atiar.com.bd/assets/ae1a61ab-1876-4a01-95db-87dc200124a6',
+    buttonLink: '/categories/battery',
+  },
+];
+
+const FALLBACK_GOOGLE_REVIEWS: GoogleReviewsSummary = {
+  rating: 5.0,
+  totalReviews: 4,
+  writeAReviewUrl:
+    'https://www.google.com/maps/place//data=!4m3!3m2!1s0x375693e4553ce883:0x538771cd5d083f9e!12e1?g_mp=CiVnb29nbGUubWFwcy5wbGFjZXMudjEuUGxhY2VzLkdldFBsYWNlEAIYBCAA',
+  reviews: [
+    {
+      id: 'bccc79f6-28aa-4677-900c-08a1598587e0',
+      authorName: 'Dr. Faruqul Islam FARUK',
+      authorAvatar:
+        'https://lh3.googleusercontent.com/a-/ALV-UjUQClmzuEffohDKwydXAZMngNvssKS9MK3DViVgrIwds-NruPg-=s64-c-rp-mo-ba12-br100',
+      rating: 5,
+      text: 'I bought a IPS from Radical engineering👍. Best service in Kishoreganj.',
+      publishedAt: 'Aug 18, 2026',
+    },
+    {
+      id: '8411cc2c-c687-4f19-8302-5af539e16a44',
+      authorName: 'mohiuddin shahin',
+      authorAvatar:
+        'https://lh3.googleusercontent.com/a-/ALV-UjUu4SjxSLCAHfsVMA4yReF3RCY7A6VxGq1FdwTJMrWJ9Pv0gIDo=s64-c-rp-mo-br100',
+      rating: 5,
+      text: 'Best IPS and Solar inverter seller in Kishoreganj. Their support is absolutely fantastic.',
+      publishedAt: 'Jun 26, 2025',
+    },
+    {
+      id: '0069dc42-a0fe-4efc-8c8d-a53d59123126',
+      authorName: 'Md. Arifur Rahman',
+      authorAvatar:
+        'https://lh3.googleusercontent.com/a-/ALV-UjVxS5jn2qt1hVcAxbEYj12g6B2V8UlZM-9gZ83uZ02xi_RYOGFmxg=s64-c-rp-mo-ba12-br100',
+      rating: 5,
+      text: "Radical Engineering gave me support on our office's solar system setup. Best service and support I got from them. Worth it.",
+      publishedAt: 'Jun 26, 2025',
+    },
+    {
+      id: '73b74a32-0b19-4d79-a4bd-9375a705cfb9',
+      authorName: 'Jahirul Islam Jony',
+      authorAvatar:
+        'https://lh3.googleusercontent.com/a-/ALV-UjVDK5hjoMsgJ1C04CcZKWItDq7qRPte5681WcvaWLeJnLkKCj8=s64-c-rp-mo-br100',
+      rating: 5,
+      text: 'Good service and professional.',
+      publishedAt: 'Jun 30, 2025',
+    },
+  ],
+};
 
 export const apiService = new ApiService();

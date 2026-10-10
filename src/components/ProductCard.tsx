@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Platform, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Product } from '../types';
 import { useTheme } from '../context/ThemeContext';
@@ -17,6 +17,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, hori
   const { colors, isDark } = useTheme();
   const { addToCart, toggleWishlist, isWishlisted } = useCart();
   const wishlisted = isWishlisted(product.id);
+  const isCallForPrice = !product.price || product.price <= 0;
 
   if (horizontal) {
     return (
@@ -59,9 +60,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, hori
 
         <View style={styles.horizontalDetails}>
           <View style={styles.cardHeaderRow}>
-            <Text style={[styles.brandBadge, { color: colors.primary }]} numberOfLines={1}>
-              {product.brand}
-            </Text>
+            {product.brand ? (
+              <Text style={[styles.brandBadge, { color: colors.primary }]} numberOfLines={1}>
+                {product.brand}
+              </Text>
+            ) : product.categoryName ? (
+              <Text style={[styles.brandBadge, { color: colors.primary }]} numberOfLines={1}>
+                {product.categoryName}
+              </Text>
+            ) : null}
             {product.subCategory && (
               <View style={[styles.subCatPill, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]}>
                 <Text style={[styles.subCatText, { color: colors.textSecondary }]} numberOfLines={1}>
@@ -77,23 +84,44 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, hori
 
           <View style={styles.priceAndActionRow}>
             <View>
-              <Text style={[styles.priceMain, { color: colors.primary }]}>
-                {APP_CONFIG.currency} {product.price.toLocaleString()}
-              </Text>
-              {product.originalPrice && (
-                <Text style={[styles.strikePrice, { color: colors.textMuted }]}>
-                  {APP_CONFIG.currency} {product.originalPrice.toLocaleString()}
+              {!isCallForPrice ? (
+                <>
+                  <Text style={[styles.priceMain, { color: colors.primary }]}>
+                    {APP_CONFIG.currency} {product.price.toLocaleString()}
+                  </Text>
+                  {product.originalPrice ? (
+                    <Text style={[styles.strikePrice, { color: colors.textMuted }]}>
+                      {APP_CONFIG.currency} {product.originalPrice.toLocaleString()}
+                    </Text>
+                  ) : null}
+                </>
+              ) : (
+                <Text style={[styles.callForPriceMain, { color: colors.primary }]}>
+                  Call for Price
                 </Text>
               )}
             </View>
 
-            <TouchableOpacity
-              onPress={() => addToCart(product)}
-              style={[styles.addCartBtnSmall, { backgroundColor: colors.primary }]}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="cart-outline" size={16} color={isDark ? '#260B00' : '#FFFFFF'} />
-            </TouchableOpacity>
+            {!isCallForPrice ? (
+              <TouchableOpacity
+                onPress={() => addToCart(product)}
+                style={[styles.addCartBtnSmall, { backgroundColor: colors.primary }]}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="cart-outline" size={16} color={isDark ? '#260B00' : '#FFFFFF'} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={(e) => {
+                  e.stopPropagation();
+                  Linking.openURL(`tel:${APP_CONFIG.hotline1Raw}`);
+                }}
+                style={[styles.addCartBtnSmall, { backgroundColor: colors.primary }]}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="call" size={14} color={isDark ? '#260B00' : '#FFFFFF'} />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </TouchableOpacity>
@@ -164,54 +192,101 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, hori
 
       {/* Product Content Body */}
       <View style={styles.contentBody}>
-        {/* Brand & Stock Status */}
-        <View style={styles.metaRow}>
-          <Text style={[styles.brandText, { color: colors.primary }]} numberOfLines={1}>
-            {product.brand}
+        <View style={styles.cardTopInfo}>
+          {/* Brand & Stock Status */}
+          <View style={styles.metaRow}>
+            {product.brand ? (
+              <Text style={[styles.brandText, { color: colors.primary }]} numberOfLines={1}>
+                {product.brand}
+              </Text>
+            ) : (product.categoryName || product.subCategory) ? (
+              <Text style={[styles.brandText, { color: colors.primary }]} numberOfLines={1}>
+                {product.categoryName || product.subCategory}
+              </Text>
+            ) : (
+              <Text style={[styles.brandText, { color: colors.primary }]} numberOfLines={1}>
+                Equipment
+              </Text>
+            )}
+            <View style={styles.stockIndicator}>
+              <View style={[styles.stockDot, { backgroundColor: product.inStock ? COLORS.success : COLORS.warning }]} />
+              <Text style={[styles.stockStatusText, { color: colors.textSecondary }]}>
+                {product.inStock ? 'In Stock' : 'Order'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Product Title */}
+          <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>
+            {product.title}
           </Text>
-          <View style={styles.stockIndicator}>
-            <View style={[styles.stockDot, { backgroundColor: product.inStock ? COLORS.success : COLORS.warning }]} />
-            <Text style={[styles.stockStatusText, { color: colors.textSecondary }]}>
-              {product.inStock ? 'In Stock' : 'Order'}
-            </Text>
-          </View>
+
+          {/* Sub-category / Warranty tag */}
+          {product.warranty ? (
+            <View style={styles.subTagRow}>
+              <Ionicons name="shield-checkmark-outline" size={11} color={COLORS.success} />
+              <Text style={[styles.subTagText, { color: colors.textSecondary }]} numberOfLines={1} ellipsizeMode="tail">
+                {product.warranty}
+              </Text>
+            </View>
+          ) : product.subCategory ? (
+            <View style={styles.subTagRow}>
+              <Ionicons name="hardware-chip-outline" size={11} color={colors.textSecondary} />
+              <Text style={[styles.subTagText, { color: colors.textSecondary }]} numberOfLines={1} ellipsizeMode="tail">
+                {product.subCategory}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.subTagRow}>
+              <Ionicons name="checkmark-circle-outline" size={11} color={COLORS.success} />
+              <Text style={[styles.subTagText, { color: colors.textSecondary }]} numberOfLines={1} ellipsizeMode="tail">
+                Genuine Equipment
+              </Text>
+            </View>
+          )}
         </View>
-
-        {/* Product Title */}
-        <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>
-          {product.title}
-        </Text>
-
-        {/* Sub-category / Warranty tag */}
-        {product.warranty ? (
-          <View style={styles.subTagRow}>
-            <Ionicons name="shield-checkmark-outline" size={11} color={COLORS.success} />
-            <Text style={[styles.subTagText, { color: colors.textSecondary }]} numberOfLines={1}>
-              {product.warranty}
-            </Text>
-          </View>
-        ) : null}
 
         {/* Price & Add to Cart Footer */}
         <View style={styles.footerRow}>
           <View style={styles.priceColumn}>
-            <Text style={[styles.price, { color: colors.primary }]}>
-              {APP_CONFIG.currency} {product.price.toLocaleString()}
-            </Text>
-            {product.originalPrice ? (
-              <Text style={[styles.originalPrice, { color: colors.textMuted }]}>
-                {APP_CONFIG.currency} {product.originalPrice.toLocaleString()}
+            {!isCallForPrice ? (
+              <>
+                <Text style={[styles.price, { color: colors.primary }]}>
+                  {APP_CONFIG.currency} {product.price.toLocaleString()}
+                </Text>
+                {product.originalPrice ? (
+                  <Text style={[styles.originalPrice, { color: colors.textMuted }]}>
+                    {APP_CONFIG.currency} {product.originalPrice.toLocaleString()}
+                  </Text>
+                ) : null}
+              </>
+            ) : (
+              <Text style={[styles.callForPriceGrid, { color: colors.primary }]}>
+                Call for Price
               </Text>
-            ) : null}
+            )}
           </View>
 
-          <TouchableOpacity
-            onPress={() => addToCart(product)}
-            style={[styles.addCartBtn, { backgroundColor: colors.primary }]}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="cart" size={16} color={isDark ? '#260B00' : '#FFFFFF'} />
-          </TouchableOpacity>
+          {!isCallForPrice ? (
+            <TouchableOpacity
+              onPress={() => addToCart(product)}
+              style={[styles.addCartBtn, { backgroundColor: colors.primary }]}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="cart" size={16} color={isDark ? '#260B00' : '#FFFFFF'} />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              onPress={(e) => {
+                e.stopPropagation();
+                Linking.openURL(`tel:${APP_CONFIG.hotline1Raw}`);
+              }}
+              style={[styles.addCartBtn, { backgroundColor: colors.primary }]}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="call" size={15} color={isDark ? '#260B00' : '#FFFFFF'} />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </TouchableOpacity>
@@ -307,12 +382,18 @@ const styles = StyleSheet.create({
   },
   contentBody: {
     padding: SPACING.sm + 4,
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  cardTopInfo: {
+    flex: 1,
   },
   metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 4,
+    minHeight: 16,
   },
   brandText: {
     fontSize: 10,
@@ -339,17 +420,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     lineHeight: 18,
-    height: 36,
+    minHeight: 36,
     marginBottom: 4,
   },
   subTagRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 8,
+    marginBottom: 6,
+    minHeight: 16,
   },
   subTagText: {
-    fontSize: 10,
+    fontSize: 9.5,
+    lineHeight: 13,
     flex: 1,
   },
   footerRow: {
@@ -473,5 +556,15 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.sm,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  callForPriceMain: {
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  callForPriceGrid: {
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: -0.2,
   },
 });

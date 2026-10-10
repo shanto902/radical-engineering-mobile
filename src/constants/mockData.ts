@@ -266,7 +266,7 @@ export const PRODUCTS: Product[] = [
     slug: 'radical-copper-lightning-arrester-kit',
     categoryId: 'accessories',
     categoryName: 'Accessories',
-    brand: 'Radical Engineering',
+    brand: '',
     model: 'RE-LPS-5SPIKE',
     price: 14500,
     originalPrice: 16000,

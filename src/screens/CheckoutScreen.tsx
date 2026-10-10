@@ -20,11 +20,13 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { Header } from '../components/Header';
 import { useTheme } from '../context/ThemeContext';
+import { useNetwork } from '../context/NetworkContext';
 import { useCart } from '../context/CartContext';
 import { apiService } from '../services/api';
 import { storageService } from '../services/storage';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
 import { APP_CONFIG } from '../constants/config';
+import { ExtraCharge, CartItem } from '../types';
 
 interface CheckoutScreenProps {
   navigation: any;
@@ -52,7 +54,8 @@ const CELEBRATION_COLORS = [
 
 export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) => {
   const { colors, isDark } = useTheme();
-  const { cart, totalAmount, clearCart } = useCart();
+  const { isOffline } = useNetwork();
+  const { cart, totalAmount, clearCart, updateCartItems } = useCart();
   const insets = useSafeAreaInsets();
   const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 16 : 10);
 
@@ -135,7 +138,247 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
     }))
   ).current;
 
-  const grandTotal = totalAmount;
+  // Parse numeric weight in kg from product
+  const parseProductWeightKg = (product: any): number => {
+    if (!product) return 0;
+    const raw =
+      product.weight ??
+      product.specs?.['Weight'] ??
+      product.specs?.['Filled Weight'] ??
+      product.specs?.['Net Weight'] ??
+      '';
+    if (raw === undefined || raw === null || raw === '') return 0;
+
+    if (typeof raw === 'number') {
+      return raw > 0 ? raw : 0;
+    }
+
+    const str = String(raw).trim().toLowerCase();
+    if (!str || str === '0') return 0;
+
+    // Handle grams (e.g., "500 g", "500g")
+    const gramMatch = str.match(/([\d\.]+)\s*g(?!m|ram)/);
+    if (gramMatch && !str.includes('kg')) {
+      const gVal = parseFloat(gramMatch[1]);
+      return isNaN(gVal) ? 0 : gVal / 1000;
+    }
+
+    // Handle kilograms (e.g. "27.5 kg", "27.5kg", "25")
+    const match = str.match(/([\d\.]+)/);
+    if (match) {
+      const val = parseFloat(match[1]);
+      return isNaN(val) ? 0 : val;
+    }
+    return 0;
+  };
+
+  // Directus Settings State (e.g. delivery_charge, per_kg_charge)
+  const [deliveryCharge, setDeliveryCharge] = useState<number>(150);
+  const [perKgCharge, setPerKgCharge] = useState<number>(0);
+  const [isLoadingDeliveryCharge, setIsLoadingDeliveryCharge] = useState<boolean>(true);
+
+  // Pricing Integrity & Revalidation States
+  const [isRevalidatingPricing, setIsRevalidatingPricing] = useState<boolean>(true);
+  const [priceNotice, setPriceNotice] = useState<string | null>(null);
+
+  // Fulfillment Method: 'delivery' (Doorstep) vs 'pickup' (Store)
+  const [fulfillmentMethod, setFulfillmentMethod] = useState<'delivery' | 'pickup'>('delivery');
+
+  // Hydrate / sync weights for all cart items from API
+  const [syncedWeights, setSyncedWeights] = useState<Record<string, number>>({});
+
+  // 1st Fetch last_revalidate_time & Directus settings to guarantee pricing data integrity
+  useEffect(() => {
+    let isMounted = true;
+    const checkPricingIntegrityAndSettings = async () => {
+      setIsRevalidatingPricing(true);
+      try {
+        // Step 1: Read locally cached last_revalidate_time
+        const storedRevalidateTime = await storageService.getLastRevalidateTime();
+
+        // Step 2: 1st Fetch remote settings (singleton) from Directus with forceRefresh
+        const settings = await apiService.getSettings(true);
+        if (!isMounted) return;
+
+        // Apply updated delivery charge & per_kg_charge
+        if (settings.delivery_charge !== undefined && settings.delivery_charge !== null) {
+          const dVal = Number(settings.delivery_charge);
+          if (!isNaN(dVal)) setDeliveryCharge(dVal);
+        }
+        if (settings.per_kg_charge !== undefined && settings.per_kg_charge !== null) {
+          const pVal = Number(settings.per_kg_charge);
+          if (!isNaN(pVal)) setPerKgCharge(pVal);
+        }
+        setIsLoadingDeliveryCharge(false);
+
+        const remoteRevalidateTime = settings.last_revalidate_time
+          ? String(settings.last_revalidate_time)
+          : null;
+
+        // Step 3: Compare stored timestamp vs remote timestamp
+        // If times do NOT match (or first visit), refetch products here to ensure pricing integrity!
+        const isTimeMismatch =
+          !storedRevalidateTime ||
+          (remoteRevalidateTime !== null && storedRevalidateTime !== remoteRevalidateTime);
+
+        if (isTimeMismatch && cart.length > 0) {
+          const updatedCart: CartItem[] = [];
+          const removedCallForPriceTitles: string[] = [];
+          const priceChanges: { title: string; oldPrice: number; newPrice: number }[] = [];
+          const newWeightMap: Record<string, number> = {};
+
+          await Promise.all(
+            cart.map(async (item) => {
+              if (item.customPackage) {
+                // System Builder packages have customized calculated components
+                updatedCart.push(item);
+                return;
+              }
+
+              try {
+                const freshProduct = await apiService.getProductById(item.product.id);
+                if (freshProduct) {
+                  const oldPrice = item.product.price;
+                  const newPrice = freshProduct.price;
+
+                  // Update weight
+                  const freshWeight = parseProductWeightKg(freshProduct);
+                  if (freshWeight > 0) {
+                    newWeightMap[item.id] = freshWeight;
+                  }
+
+                  // If price is 0, it's Call for Price and cannot be checked out online
+                  if (newPrice <= 0) {
+                    removedCallForPriceTitles.push(freshProduct.title || item.product.title);
+                    return; // Dropped from checkout
+                  }
+
+                  if (oldPrice !== newPrice) {
+                    priceChanges.push({
+                      title: freshProduct.title || item.product.title,
+                      oldPrice,
+                      newPrice,
+                    });
+                  }
+
+                  updatedCart.push({
+                    ...item,
+                    product: freshProduct,
+                  });
+                  return;
+                }
+              } catch (err) {
+                console.warn('Failed to refetch product for checkout integrity:', item.product.id, err);
+              }
+
+              // Fallback: keep existing item if network fails for this item
+              updatedCart.push(item);
+            })
+          );
+
+          if (isMounted) {
+            updateCartItems(updatedCart);
+            if (Object.keys(newWeightMap).length > 0) {
+              setSyncedWeights((prev) => ({ ...prev, ...newWeightMap }));
+            }
+
+            // Successfully refetched & verified: update stored revalidation time
+            if (remoteRevalidateTime) {
+              await storageService.saveLastRevalidateTime(remoteRevalidateTime);
+            }
+
+            if (removedCallForPriceTitles.length > 0) {
+              const msg = `Items updated to 'Call for Price' (${removedCallForPriceTitles.join(
+                ', '
+              )}) were removed from online checkout.`;
+              setPriceNotice(msg);
+              Alert.alert('Items Unavailable Online', msg);
+            } else if (priceChanges.length > 0) {
+              const detail = priceChanges
+                .map(
+                  (p) =>
+                    `• ${p.title}: ৳${p.oldPrice.toLocaleString()} → ৳${p.newPrice.toLocaleString()}`
+                )
+                .join('\n');
+              const msg = `Pricing updated for ${priceChanges.length} item(s) to match current catalog rates.`;
+              setPriceNotice(msg);
+              Alert.alert('Pricing Updated', `${msg}\n\n${detail}`);
+            }
+          }
+        } else if (remoteRevalidateTime && isMounted) {
+          // Stored time matches remote time: data is intact!
+          await storageService.saveLastRevalidateTime(remoteRevalidateTime);
+        }
+      } catch (err) {
+        console.warn('Revalidation check failed on checkout:', err);
+      } finally {
+        if (isMounted) {
+          setIsRevalidatingPricing(false);
+          setIsLoadingDeliveryCharge(false);
+        }
+      }
+    };
+
+    checkPricingIntegrityAndSettings();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Sync remaining weights if any item was missing
+  useEffect(() => {
+    let isMounted = true;
+    const syncMissingWeights = async () => {
+      const map: Record<string, number> = {};
+      await Promise.all(
+        cart.map(async (item) => {
+          if (syncedWeights[item.id] !== undefined) return;
+          const directWeight = parseProductWeightKg(item.product);
+          if (directWeight > 0) {
+            map[item.id] = directWeight;
+          } else if (item.product?.id) {
+            try {
+              const fresh = await apiService.getProductById(item.product.id);
+              if (fresh) {
+                const w = parseProductWeightKg(fresh);
+                if (w > 0) {
+                  map[item.id] = w;
+                }
+              }
+            } catch {
+              // ignore
+            }
+          }
+        })
+      );
+      if (isMounted && Object.keys(map).length > 0) {
+        setSyncedWeights((prev) => ({ ...prev, ...map }));
+      }
+    };
+
+    if (cart.length > 0) {
+      syncMissingWeights();
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [cart]);
+
+  // Calculate total package weight of all cart items (kg * quantity)
+  const totalCartWeightKg = cart.reduce((sum, item) => {
+    const itemWeight = syncedWeights[item.id] ?? parseProductWeightKg(item.product);
+    return sum + itemWeight * (item.quantity || 1);
+  }, 0);
+
+  // Delivery charge formula: delivery_charge + ( product weight * per_kg_charge )
+  const baseDeliveryCharge = deliveryCharge;
+  const weightCharge = perKgCharge > 0 ? Math.round(totalCartWeightKg * perKgCharge) : 0;
+
+  // Pick up from store has 0 delivery charge
+  const effectiveDeliveryCharge =
+    fulfillmentMethod === 'pickup' ? 0 : baseDeliveryCharge + weightCharge;
+  const grandTotal = totalAmount + effectiveDeliveryCharge;
 
   // Phone input handler with auto-lookup on 11 digits
   const handlePhoneChange = async (text: string) => {
@@ -224,7 +467,15 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
     // Immediately dismiss keyboard on first tap
     Keyboard.dismiss();
 
-    if (isSubmitting) return;
+    if (isSubmitting || isRevalidatingPricing || isOffline) {
+      if (isOffline) {
+        Alert.alert(
+          'No Internet Connection',
+          'Please connect to the internet to confirm and place your order.'
+        );
+      }
+      return;
+    }
 
     const clean = phone.replace(/[\s\-\(\)]/g, '');
     let norm = clean;
@@ -244,7 +495,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
       return;
     }
 
-    if (!address.trim()) {
+    if (fulfillmentMethod === 'delivery' && !address.trim()) {
       Alert.alert('Delivery Address Required', 'Please enter your delivery or installation address.');
       return;
     }
@@ -256,12 +507,56 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
 
     setIsSubmitting(true);
     try {
+      const extraChargesList: ExtraCharge[] =
+        effectiveDeliveryCharge > 0
+          ? [
+              {
+                name: weightCharge > 0 ? 'Base Delivery Charge' : 'Delivery Charge',
+                title: weightCharge > 0 ? 'Base Delivery Charge' : 'Delivery Charge',
+                label: weightCharge > 0 ? 'Base Delivery Charge' : 'Delivery Charge',
+                amount: weightCharge > 0 ? baseDeliveryCharge : effectiveDeliveryCharge,
+                value: weightCharge > 0 ? baseDeliveryCharge : effectiveDeliveryCharge,
+                price: weightCharge > 0 ? baseDeliveryCharge : effectiveDeliveryCharge,
+              },
+              ...(weightCharge > 0
+                ? [
+                    {
+                      name: `Weight Charge (${totalCartWeightKg % 1 === 0 ? totalCartWeightKg : totalCartWeightKg.toFixed(1)} kg @ ৳${perKgCharge}/kg)`,
+                      title: `Weight Charge (${totalCartWeightKg % 1 === 0 ? totalCartWeightKg : totalCartWeightKg.toFixed(1)} kg)`,
+                      label: 'Weight Charge',
+                      amount: weightCharge,
+                      value: weightCharge,
+                      price: weightCharge,
+                    },
+                  ]
+                : []),
+            ]
+          : [];
+
+      const orderAddress =
+        fulfillmentMethod === 'pickup'
+          ? (address.trim()
+              ? `[Store Pickup] ${address.trim()}`
+              : `[Store Pickup] Radical Engineering Showroom: ${APP_CONFIG.address}`)
+          : address.trim();
+
+      const orderNotes = [
+        fulfillmentMethod === 'pickup'
+          ? '[Fulfillment: Store Pickup]'
+          : `[Fulfillment: Home Delivery${totalCartWeightKg > 0 ? ` | Package Weight: ${totalCartWeightKg % 1 === 0 ? totalCartWeightKg : totalCartWeightKg.toFixed(1)} kg` : ''}]`,
+        notes.trim() || '',
+      ]
+        .filter(Boolean)
+        .join(' - ');
+
       const result = await apiService.createOrder({
         name: name.trim(),
         phone: norm,
-        address: address.trim(),
-        notes: notes.trim() || undefined,
+        address: orderAddress,
+        notes: orderNotes || undefined,
         total: grandTotal,
+        deliveryCharge: effectiveDeliveryCharge,
+        extraCharges: extraChargesList,
         items: cart.map((item) => ({
           id: item.product.id,
           productTitle: item.product.title,
@@ -333,12 +628,25 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
       )
       .join('\n');
 
-    let message = `*Radical Engineering Order / Quotation Request*\n\n${itemsText}\n\n*Total Payable:* ৳${totalAmount.toLocaleString()}`;
+    let message = `*Radical Engineering Order / Quotation Request*\n\n${itemsText}\n\n*Fulfillment:* ${
+      fulfillmentMethod === 'pickup' ? 'Pick up from Store (Showroom)' : 'Home Delivery'
+    }\n*Items Subtotal:* ৳${totalAmount.toLocaleString()}\n*Delivery Fee:* ${
+      fulfillmentMethod === 'pickup'
+        ? '৳0 (Store Pickup)'
+        : effectiveDeliveryCharge > 0
+        ? `৳${effectiveDeliveryCharge.toLocaleString()}`
+        : 'Free'
+    }\n*Total Payable:* ৳${grandTotal.toLocaleString()}`;
 
     if (phone) message += `\n\n*Phone:* ${phone}`;
     if (name) message += `\n*Customer:* ${name}`;
-    if (address) message += `\n*Address:* ${address}`;
-    if (notes) message += `\n*Notes:* ${notes}`;
+    if (fulfillmentMethod === 'pickup') {
+      message += `\n*Store Location:* ${APP_CONFIG.address}`;
+      if (address) message += `\n*Customer Note/Area:* ${address}`;
+    } else {
+      if (address) message += `\n*Delivery Address:* ${address}`;
+    }
+    if (notes) message += `\n*Special Notes:* ${notes}`;
 
     Linking.openURL(
       `https://wa.me/${APP_CONFIG.whatsappNumber.replace('+', '')}?text=${encodeURIComponent(message)}`
@@ -377,6 +685,229 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
+          {/* Real-time Pricing Notice Banner if prices revalidated */}
+          {priceNotice && (
+            <View
+              style={[
+                styles.priceNoticeBanner,
+                {
+                  backgroundColor: isDark ? 'rgba(252, 185, 116, 0.12)' : '#FFFBEB',
+                  borderColor: isDark ? 'rgba(252, 185, 116, 0.3)' : '#FDE68A',
+                },
+              ]}
+            >
+              <Ionicons name="information-circle" size={18} color={COLORS.warning} />
+              <Text style={[styles.priceNoticeText, { color: colors.text }]}>
+                {priceNotice}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setPriceNotice(null)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close-circle" size={18} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Offline Warning Banner on Checkout */}
+          {isOffline && (
+            <View
+              style={[
+                styles.offlineNoticeBanner,
+                {
+                  backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEF2F2',
+                  borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#FCA5A5',
+                },
+              ]}
+            >
+              <Ionicons name="cloud-offline" size={20} color="#EF4444" />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.offlineNoticeTitle, { color: '#EF4444' }]}>
+                  You are currently offline
+                </Text>
+                <Text style={[styles.offlineNoticeSub, { color: colors.textSecondary }]}>
+                  Please connect to the internet to verify pricing and place your order.
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* Section 0: Order Fulfillment Option (Delivery vs Pick up from Store) */}
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.cardHeader}>
+              <View style={[styles.headerIconWrap, { backgroundColor: isDark ? 'rgba(252, 185, 116, 0.15)' : '#F5EBE6' }]}>
+                <Ionicons name="swap-horizontal-outline" size={18} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.cardTitle, { color: colors.text }]}>Order Fulfillment</Text>
+                <Text style={[styles.cardSubtitle, { color: colors.textSecondary }]}>
+                  Choose home delivery or collect in person
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.fulfillmentOptionsRow}>
+              {/* Option 1: Doorstep Delivery */}
+              <TouchableOpacity
+                style={[
+                  styles.fulfillmentOption,
+                  {
+                    backgroundColor:
+                      fulfillmentMethod === 'delivery'
+                        ? (isDark ? 'rgba(255, 107, 0, 0.15)' : '#FFF7ED')
+                        : colors.surfaceVariant,
+                    borderColor: fulfillmentMethod === 'delivery' ? colors.primary : colors.border,
+                  },
+                ]}
+                onPress={() => setFulfillmentMethod('delivery')}
+                activeOpacity={0.8}
+              >
+                <View style={styles.fulfillmentRadioRow}>
+                  <View
+                    style={[
+                      styles.radioCircle,
+                      { borderColor: fulfillmentMethod === 'delivery' ? colors.primary : colors.textMuted },
+                    ]}
+                  >
+                    {fulfillmentMethod === 'delivery' && (
+                      <View style={[styles.radioDot, { backgroundColor: colors.primary }]} />
+                    )}
+                  </View>
+                  <Ionicons
+                    name="bicycle"
+                    size={20}
+                    color={fulfillmentMethod === 'delivery' ? colors.primary : colors.textSecondary}
+                  />
+                </View>
+                <Text
+                  style={[
+                    styles.fulfillmentTitle,
+                    { color: fulfillmentMethod === 'delivery' ? colors.primary : colors.text },
+                  ]}
+                >
+                  Home Delivery
+                </Text>
+                <Text style={[styles.fulfillmentSub, { color: colors.textSecondary }]}>
+                  {isLoadingDeliveryCharge
+                    ? 'Calculating...'
+                    : effectiveDeliveryCharge > 0
+                    ? `৳${effectiveDeliveryCharge.toLocaleString()} fee`
+                    : 'Free delivery'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Option 2: Pick up from store */}
+              <TouchableOpacity
+                style={[
+                  styles.fulfillmentOption,
+                  {
+                    backgroundColor:
+                      fulfillmentMethod === 'pickup'
+                        ? (isDark ? 'rgba(16, 185, 129, 0.12)' : '#ECFDF5')
+                        : colors.surfaceVariant,
+                    borderColor: fulfillmentMethod === 'pickup' ? '#10B981' : colors.border,
+                  },
+                ]}
+                onPress={() => setFulfillmentMethod('pickup')}
+                activeOpacity={0.8}
+              >
+                <View style={styles.fulfillmentRadioRow}>
+                  <View
+                    style={[
+                      styles.radioCircle,
+                      { borderColor: fulfillmentMethod === 'pickup' ? '#10B981' : colors.textMuted },
+                    ]}
+                  >
+                    {fulfillmentMethod === 'pickup' && (
+                      <View style={[styles.radioDot, { backgroundColor: '#10B981' }]} />
+                    )}
+                  </View>
+                  <Ionicons
+                    name="storefront"
+                    size={20}
+                    color={fulfillmentMethod === 'pickup' ? '#10B981' : colors.textSecondary}
+                  />
+                </View>
+                <Text
+                  style={[
+                    styles.fulfillmentTitle,
+                    { color: fulfillmentMethod === 'pickup' ? (isDark ? '#34D399' : '#065F46') : colors.text },
+                  ]}
+                >
+                  Pick up from Store
+                </Text>
+                <Text style={[styles.fulfillmentSub, { color: '#10B981', fontWeight: '700' }]}>
+                  ৳0 Fee (Free)
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {fulfillmentMethod === 'pickup' && (
+              <View
+                style={[
+                  styles.pickupInfoBox,
+                  {
+                    backgroundColor: isDark ? 'rgba(16, 185, 129, 0.1)' : '#F0FDF4',
+                    borderColor: isDark ? '#065F46' : '#BBF7D0',
+                  },
+                ]}
+              >
+                <Ionicons name="location-sharp" size={18} color="#10B981" style={{ marginTop: 2 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.pickupInfoTitle, { color: isDark ? '#34D399' : '#065F46' }]}>
+                    Pickup Showroom Location
+                  </Text>
+                  <Text style={[styles.pickupInfoAddress, { color: colors.text }]}>
+                    {APP_CONFIG.address}
+                  </Text>
+                  <Text style={[styles.pickupInfoHint, { color: colors.textSecondary }]}>
+                    Delivery charge is ৳0. Our team will prepare your items for showroom collection.
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {fulfillmentMethod === 'delivery' && !isLoadingDeliveryCharge && (
+              <View
+                style={[
+                  styles.deliveryHelperCard,
+                  {
+                    backgroundColor: isDark ? 'rgba(255, 107, 0, 0.08)' : '#FFF7ED',
+                    borderColor: isDark ? 'rgba(255, 107, 0, 0.25)' : '#FFEDD5',
+                  },
+                ]}
+              >
+                <View style={styles.deliveryHelperHeader}>
+                  <Ionicons name="calculator-outline" size={15} color={colors.primary} />
+                  <Text style={[styles.deliveryHelperTitle, { color: colors.primary }]}>
+                    Delivery Charge Calculation
+                  </Text>
+                </View>
+                {totalCartWeightKg > 0 && perKgCharge > 0 ? (
+                  <>
+                    <Text style={[styles.deliveryHelperFormula, { color: colors.text }]}>
+                      Base Delivery (৳{baseDeliveryCharge.toLocaleString()}) + Weight (৳{perKgCharge}/kg × {totalCartWeightKg % 1 === 0 ? totalCartWeightKg : totalCartWeightKg.toFixed(1)} kg = ৳{weightCharge.toLocaleString()}) = ৳{effectiveDeliveryCharge.toLocaleString()}
+                    </Text>
+                    <Text style={[styles.deliveryHelperHint, { color: colors.textSecondary }]}>
+                      Total shipment weight calculated from product specifications ({totalCartWeightKg % 1 === 0 ? totalCartWeightKg : totalCartWeightKg.toFixed(1)} kg)
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={[styles.deliveryHelperFormula, { color: colors.text }]}>
+                      Base delivery charge: ৳{baseDeliveryCharge.toLocaleString()}
+                    </Text>
+                    {totalCartWeightKg > 0 ? (
+                      <Text style={[styles.deliveryHelperHint, { color: colors.textSecondary }]}>
+                        Total package weight: {totalCartWeightKg % 1 === 0 ? totalCartWeightKg : totalCartWeightKg.toFixed(1)} kg (standard delivery applied)
+                      </Text>
+                    ) : null}
+                  </>
+                )}
+              </View>
+            )}
+          </View>
+
           {/* Section 1: Customer Shipping Form (Phone FIRST) */}
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.cardHeader}>
@@ -384,7 +915,9 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
                 <Ionicons name="person-outline" size={18} color={colors.primary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.cardTitle, { color: colors.text }]}>Shipping & Contact Details</Text>
+                <Text style={[styles.cardTitle, { color: colors.text }]}>
+                  {fulfillmentMethod === 'pickup' ? 'Contact Details' : 'Shipping & Contact Details'}
+                </Text>
                 <Text style={[styles.cardSubtitle, { color: colors.textSecondary }]}>
                   {phone || name || address
                     ? 'Saved on this phone for faster checkout'
@@ -488,7 +1021,15 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
             {/* Field 3: Address */}
             <View style={styles.formGroup}>
               <Text style={[styles.formLabel, { color: colors.text }]}>
-                Delivery / Installation Address <Text style={{ color: COLORS.danger }}>*</Text>
+                {fulfillmentMethod === 'delivery' ? (
+                  <>
+                    Delivery / Installation Address <Text style={{ color: COLORS.danger }}>*</Text>
+                  </>
+                ) : (
+                  <>
+                    Contact Address / Area <Text style={{ color: colors.textMuted }}>(Optional for store pickup)</Text>
+                  </>
+                )}
               </Text>
               <View
                 style={[
@@ -498,13 +1039,17 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
                 ]}
               >
                 <Ionicons
-                  name="location-outline"
+                  name={fulfillmentMethod === 'delivery' ? 'location-outline' : 'map-outline'}
                   size={18}
                   color={colors.textSecondary}
                   style={{ marginRight: 8, marginTop: 4 }}
                 />
                 <TextInput
-                  placeholder="House, Road, Area, District (e.g. Station Road, Kishoreganj Sadar)"
+                  placeholder={
+                    fulfillmentMethod === 'delivery'
+                      ? 'House, Road, Area, District (e.g. Station Road, Kishoreganj Sadar)'
+                      : 'Your area or home address (Optional)'
+                  }
                   placeholderTextColor={colors.textMuted}
                   multiline
                   numberOfLines={3}
@@ -559,6 +1104,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
               const itemPrice = item.customPackage
                 ? item.customPackage.estimatedCostBDT
                 : item.product.price;
+              const itemWeight = syncedWeights[item.id] ?? parseProductWeightKg(item.product);
               return (
                 <View
                   key={item.id}
@@ -572,9 +1118,20 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
                     <Text style={[styles.itemTitle, { color: colors.text }]} numberOfLines={2}>
                       {item.product.title}
                     </Text>
-                    <Text style={[styles.itemSub, { color: colors.textSecondary }]}>
-                      {item.quantity} × {APP_CONFIG.currency} {itemPrice.toLocaleString()}
-                    </Text>
+                    <View style={styles.itemMetaLine}>
+                      <Text style={[styles.itemSub, { color: colors.textSecondary }]}>
+                        {item.quantity} × {APP_CONFIG.currency} {itemPrice.toLocaleString()}
+                      </Text>
+                      {itemWeight > 0 ? (
+                        <View style={[styles.itemWeightBadge, { backgroundColor: isDark ? '#334155' : '#F1F5F9' }]}>
+                          <Ionicons name="scale-outline" size={11} color={colors.textSecondary} />
+                          <Text style={[styles.itemWeightText, { color: colors.textSecondary }]}>
+                            {itemWeight % 1 === 0 ? itemWeight : itemWeight.toFixed(1)} kg
+                            {item.quantity > 1 ? ` (${(itemWeight * item.quantity) % 1 === 0 ? itemWeight * item.quantity : (itemWeight * item.quantity).toFixed(1)} kg)` : ''}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
                   </View>
                   <Text style={[styles.itemTotal, { color: colors.text }]}>
                     {APP_CONFIG.currency} {(itemPrice * item.quantity).toLocaleString()}
@@ -600,6 +1157,64 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
               </Text>
             </View>
 
+            <View style={styles.billRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={[styles.billLabel, { color: colors.textSecondary }]}>Items Subtotal</Text>
+                {isRevalidatingPricing && (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                )}
+              </View>
+              <Text style={[styles.billValue, { color: colors.text }]}>
+                {APP_CONFIG.currency} {totalAmount.toLocaleString()}
+              </Text>
+            </View>
+
+            <View style={styles.billRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons
+                  name={fulfillmentMethod === 'pickup' ? 'storefront-outline' : 'bicycle-outline'}
+                  size={15}
+                  color={colors.textSecondary}
+                />
+                <Text style={[styles.billLabel, { color: colors.textSecondary }]}>
+                  {fulfillmentMethod === 'pickup' ? 'Store Pickup Fee' : 'Delivery Charge'}
+                </Text>
+              </View>
+              {fulfillmentMethod === 'pickup' ? (
+                <Text style={[styles.billValue, { color: '#10B981', fontWeight: '700' }]}>
+                  ৳0 (Free)
+                </Text>
+              ) : isLoadingDeliveryCharge ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text
+                  style={[
+                    styles.billValue,
+                    { color: effectiveDeliveryCharge > 0 ? colors.text : '#10B981' },
+                  ]}
+                >
+                  {effectiveDeliveryCharge > 0 ? `${APP_CONFIG.currency} ${effectiveDeliveryCharge.toLocaleString()}` : 'Free Delivery'}
+                </Text>
+              )}
+            </View>
+
+            {/* Delivery Charge Formula Breakdown */}
+            {fulfillmentMethod === 'delivery' && !isLoadingDeliveryCharge && (
+              <View
+                style={[
+                  styles.billHelperRow,
+                  { backgroundColor: isDark ? 'rgba(255, 107, 0, 0.08)' : '#FFF7ED' },
+                ]}
+              >
+                <Ionicons name="information-circle-outline" size={13} color={colors.primary} />
+                <Text style={[styles.billHelperText, { color: colors.primary }]}>
+                  {totalCartWeightKg > 0 && perKgCharge > 0
+                    ? `Base ৳${baseDeliveryCharge.toLocaleString()} + Weight (${totalCartWeightKg % 1 === 0 ? totalCartWeightKg : totalCartWeightKg.toFixed(1)} kg × ৳${perKgCharge}/kg = ৳${weightCharge.toLocaleString()})`
+                    : `Base fee ৳${baseDeliveryCharge.toLocaleString()}${totalCartWeightKg > 0 ? ` • Total weight ${totalCartWeightKg % 1 === 0 ? totalCartWeightKg : totalCartWeightKg.toFixed(1)} kg` : ''}`}
+                </Text>
+              </View>
+            )}
+
             <View style={[styles.billTotalRow, { borderTopColor: colors.border }]}>
               <View>
                 <Text style={[styles.billTotalLabel, { color: colors.text }]}>Total Payable Amount</Text>
@@ -616,10 +1231,15 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
             <TouchableOpacity
               style={[
                 styles.submitOrderBtn,
-                { backgroundColor: colors.primary, opacity: isSubmitting ? 0.75 : 1 },
+                {
+                  backgroundColor: isOffline
+                    ? (isDark ? '#334155' : '#94A3B8')
+                    : colors.primary,
+                  opacity: isSubmitting || isRevalidatingPricing || isOffline ? 0.75 : 1,
+                },
               ]}
               onPress={handleSubmitOrder}
-              disabled={isSubmitting}
+              disabled={isSubmitting || isRevalidatingPricing || isOffline}
               activeOpacity={0.8}
             >
               {isSubmitting ? (
@@ -627,6 +1247,20 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
                   <ActivityIndicator color={isDark ? '#260B00' : '#FFFFFF'} size="small" />
                   <Text style={[styles.submitOrderText, { color: isDark ? '#260B00' : '#FFFFFF' }]}>
                     Placing Order...
+                  </Text>
+                </View>
+              ) : isRevalidatingPricing ? (
+                <View style={styles.btnLoadingRow}>
+                  <ActivityIndicator color={isDark ? '#260B00' : '#FFFFFF'} size="small" />
+                  <Text style={[styles.submitOrderText, { color: isDark ? '#260B00' : '#FFFFFF' }]}>
+                    Verifying Store Pricing...
+                  </Text>
+                </View>
+              ) : isOffline ? (
+                <View style={styles.btnLoadingRow}>
+                  <Ionicons name="cloud-offline-outline" size={18} color="#FFFFFF" />
+                  <Text style={[styles.submitOrderText, { color: '#FFFFFF' }]}>
+                    Offline • Connect to Confirm Order
                   </Text>
                 </View>
               ) : (
@@ -1166,5 +1800,162 @@ const styles = StyleSheet.create({
   homeBtnText: {
     fontSize: 13,
     fontWeight: '600',
+  },
+  fulfillmentOptionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  fulfillmentOption: {
+    flex: 1,
+    padding: 12,
+    borderRadius: RADIUS.md,
+    borderWidth: 1.5,
+    gap: 4,
+  },
+  fulfillmentRadioRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  radioCircle: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  fulfillmentTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  fulfillmentSub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  pickupInfoBox: {
+    flexDirection: 'row',
+    gap: 10,
+    padding: 12,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    marginTop: 12,
+  },
+  pickupInfoTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  pickupInfoAddress: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  pickupInfoHint: {
+    fontSize: 11,
+    fontStyle: 'italic',
+  },
+  deliveryHelperCard: {
+    padding: 12,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    marginTop: 10,
+    gap: 4,
+  },
+  deliveryHelperHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  deliveryHelperTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  deliveryHelperFormula: {
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
+  },
+  deliveryHelperHint: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  itemMetaLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  itemWeightBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: RADIUS.xs,
+  },
+  itemWeightText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  billHelperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.sm,
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  billHelperText: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '600',
+    lineHeight: 15,
+  },
+  priceNoticeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm + 2,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    marginBottom: SPACING.xs,
+  },
+  priceNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
+  },
+  offlineNoticeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm + 2,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    marginBottom: SPACING.xs,
+  },
+  offlineNoticeTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  offlineNoticeSub: {
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 2,
   },
 });

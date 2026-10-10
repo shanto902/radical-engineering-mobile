@@ -4,11 +4,14 @@ import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-c
 import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { CartProvider } from './src/context/CartContext';
+import { NetworkProvider } from './src/context/NetworkContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { navigationRef } from './src/navigation/navigationRef';
 import { CartToast } from './src/components/CartToast';
+import { NetworkBanner } from './src/components/NetworkBanner';
 
 import { COLORS } from './src/constants/theme';
+import { realtimeService } from './src/services/realtime';
 
 const NavigationRoot: React.FC = () => {
   const { isDark, colors } = useTheme();
@@ -38,18 +41,25 @@ const NavigationRoot: React.FC = () => {
       >
         <AppNavigator />
       </NavigationContainer>
+      <NetworkBanner />
       <CartToast />
     </>
   );
 };
 
 export default function App() {
+  React.useEffect(() => {
+    realtimeService.connect();
+  }, []);
+
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <ThemeProvider>
-        <CartProvider>
-          <NavigationRoot />
-        </CartProvider>
+        <NetworkProvider>
+          <CartProvider>
+            <NavigationRoot />
+          </CartProvider>
+        </NetworkProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );

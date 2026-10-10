@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { CartItem, Appliance } from '../types';
+import { CartItem, Appliance, DirectusSettings } from '../types';
 
 export interface SavedCustomDevice {
   id: string;
@@ -36,6 +36,8 @@ const KEYS = {
   BUILDER_SOLAR_HYBRID: '@radical_builder_solar_hybrid',
   CHECKOUT_CUSTOMER_INFO: '@radical_checkout_customer_info',
   LOCAL_PLACED_ORDERS: '@radical_local_placed_orders',
+  DIRECTUS_SETTINGS: '@radical_directus_settings',
+  LAST_REVALIDATE_TIME: '@radical_last_revalidate_time',
 };
 
 export const storageService = {
@@ -85,6 +87,57 @@ export const storageService = {
   async saveThemeMode(mode: 'light' | 'dark' | 'system'): Promise<void> {
     try {
       await AsyncStorage.setItem(KEYS.THEME_MODE, mode);
+    } catch {
+      // ignore
+    }
+  },
+
+  // --- Recent Searches Persistence ---
+  async getRecentSearches(): Promise<string[]> {
+    try {
+      const data = await AsyncStorage.getItem(KEYS.RECENT_SEARCHES);
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  async addRecentSearch(query: string): Promise<string[]> {
+    const trimmed = query.trim();
+    if (!trimmed || trimmed.length < 2) {
+      return this.getRecentSearches();
+    }
+    try {
+      const current = await this.getRecentSearches();
+      // Remove duplicates of the same term (case-insensitive)
+      const filtered = current.filter(
+        item => item.toLowerCase() !== trimmed.toLowerCase()
+      );
+      // Put newest search at the front, limit to 10
+      const updated = [trimmed, ...filtered].slice(0, 10);
+      await AsyncStorage.setItem(KEYS.RECENT_SEARCHES, JSON.stringify(updated));
+      return updated;
+    } catch {
+      return [];
+    }
+  },
+
+  async removeRecentSearch(query: string): Promise<string[]> {
+    try {
+      const current = await this.getRecentSearches();
+      const updated = current.filter(
+        item => item.toLowerCase() !== query.toLowerCase().trim()
+      );
+      await AsyncStorage.setItem(KEYS.RECENT_SEARCHES, JSON.stringify(updated));
+      return updated;
+    } catch {
+      return [];
+    }
+  },
+
+  async clearRecentSearches(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(KEYS.RECENT_SEARCHES);
     } catch {
       // ignore
     }
@@ -212,6 +265,40 @@ export const storageService = {
       const current = await this.getLocalPlacedOrders();
       const updated = [order, ...current.filter((o) => o.orderId !== order.orderId)].slice(0, 50);
       await AsyncStorage.setItem(KEYS.LOCAL_PLACED_ORDERS, JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
+  },
+
+  // --- Directus Settings & Revalidation Cache ---
+  async getSettings(): Promise<DirectusSettings | null> {
+    try {
+      const data = await AsyncStorage.getItem(KEYS.DIRECTUS_SETTINGS);
+      return data ? JSON.parse(data) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  async saveSettings(settings: DirectusSettings): Promise<void> {
+    try {
+      await AsyncStorage.setItem(KEYS.DIRECTUS_SETTINGS, JSON.stringify(settings));
+    } catch {
+      // ignore
+    }
+  },
+
+  async getLastRevalidateTime(): Promise<string | null> {
+    try {
+      return await AsyncStorage.getItem(KEYS.LAST_REVALIDATE_TIME);
+    } catch {
+      return null;
+    }
+  },
+
+  async saveLastRevalidateTime(time: string): Promise<void> {
+    try {
+      await AsyncStorage.setItem(KEYS.LAST_REVALIDATE_TIME, time);
     } catch {
       // ignore
     }

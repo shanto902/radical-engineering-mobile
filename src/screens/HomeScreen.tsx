@@ -18,6 +18,7 @@ import { QuickActionCard } from '../components/QuickActionCard';
 import { ProductCard } from '../components/ProductCard';
 import { ProductCardSkeleton } from '../components/Skeleton';
 import { useTheme } from '../context/ThemeContext';
+import { useNetwork } from '../context/NetworkContext';
 import { apiService, FALLBACK_BRANDS } from '../services/api';
 import { Product, Category, Project, GoogleReviewsSummary, BannerItem, BrandPartner } from '../types';
 import { COLORS, SPACING, RADIUS } from '../constants/theme';
@@ -29,28 +30,34 @@ interface HomeScreenProps {
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const { colors, isDark } = useTheme();
+  const { isOffline } = useNetwork();
   const [categories, setCategories] = useState<Category[]>([]);
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
   const [selectedHomeCat, setSelectedHomeCat] = useState<string>('all');
   const [projects, setProjects] = useState<Project[]>([]);
   const [banners, setBanners] = useState<BannerItem[]>([]);
   const [brands, setBrands] = useState<BrandPartner[]>(FALLBACK_BRANDS);
   const [reviewsData, setReviewsData] = useState<GoogleReviewsSummary | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [loadingFeatured, setLoadingFeatured] = useState(true);
 
-  const loadData = async () => {
+  const loadData = async (forceRefresh = false) => {
     try {
-      const [cats, prods, projs, reviews, sliders, brandList] = await Promise.all([
+      const [cats, featuredRes, projs, reviews, sliders, brandList] = await Promise.all([
         apiService.getCategories(),
-        apiService.getProducts(),
+        apiService.getProductsPaginated({
+          page: 1,
+          limit: 6,
+          categoryId: selectedHomeCat,
+          forceRefresh,
+        }),
         apiService.getProjects(),
         apiService.getGoogleReviews(),
         apiService.getSliders(),
         apiService.getBrands(),
       ]);
       setCategories(cats);
-      setAllProducts(prods);
+      setFeaturedProducts(featuredRes.products);
       if (brandList && brandList.length > 0) {
         setBrands(brandList);
       }
@@ -80,7 +87,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     } catch {
       // offline fallback
     } finally {
-      setLoadingProducts(false);
+      setLoadingFeatured(false);
     }
   };
 
@@ -88,9 +95,38 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     loadData();
   }, []);
 
+  // Fetch featured products using Directus SDK with limit: 6 whenever category tab changes
+  useEffect(() => {
+    let isMounted = true;
+    const fetchCategoryEquipment = async () => {
+      setLoadingFeatured(true);
+      try {
+        const res = await apiService.getProductsPaginated({
+          page: 1,
+          limit: 6,
+          categoryId: selectedHomeCat,
+        });
+        if (isMounted) {
+          setFeaturedProducts(res.products);
+        }
+      } catch (err) {
+        console.warn('Failed to load featured products for category:', err);
+      } finally {
+        if (isMounted) {
+          setLoadingFeatured(false);
+        }
+      }
+    };
+
+    fetchCategoryEquipment();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedHomeCat]);
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadData();
+    await loadData(true);
     setRefreshing(false);
   };
 
@@ -148,10 +184,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
       navigation.navigate('Catalog');
     }
   };
-
-  const filteredFeatured = selectedHomeCat === 'all'
-    ? allProducts.slice(0, 6)
-    : allProducts.filter(p => p.categoryId === selectedHomeCat).slice(0, 6);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -308,13 +340,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           </View>
         </View>
 
-        {/* Featured Products with Category Tabs */}
+        {/* Newly Arrived Equipment with Category Tabs */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionHeaderLeft}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Featured Equipment</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Newly Arrived Equipment</Text>
               <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
-                Top rated solar panels, inverters & tubular batteries
+                Latest incoming solar panels, inverters & battery equipment
               </Text>
             </View>
             <TouchableOpacity
@@ -329,7 +361,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           {/* Horizontal Category Switcher on Home */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.homeFilterRow}>
             {[
-              { id: 'all', label: 'All Featured' },
+              { id: 'all', label: 'All New Arrivals' },
               { id: 'inverter', label: 'Inverters' },
               { id: 'battery', label: 'Batteries' },
               { id: 'solar-panels', label: 'Solar Panels' },
@@ -358,15 +390,28 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           </ScrollView>
 
           <View style={styles.productsGrid}>
-            {loadingProducts ? (
+            {loadingFeatured ? (
               <>
                 <ProductCardSkeleton />
                 <ProductCardSkeleton />
                 <ProductCardSkeleton />
                 <ProductCardSkeleton />
               </>
+            ) : featuredProducts.length === 0 ? (
+              <View style={styles.emptyFeaturedBox}>
+                <Ionicons
+                  name={isOffline ? 'cloud-offline-outline' : 'hardware-chip-outline'}
+                  size={32}
+                  color={colors.textMuted}
+                />
+                <Text style={[styles.emptyFeaturedText, { color: colors.textSecondary }]}>
+                  {isOffline
+                    ? 'Connect to internet to load equipment'
+                    : 'No equipment found in this category'}
+                </Text>
+              </View>
             ) : (
-              filteredFeatured.map((product) => (
+              featuredProducts.slice(0, 6).map((product) => (
                 <ProductCard
                   key={product.id}
                   product={product}
@@ -879,5 +924,17 @@ const styles = StyleSheet.create({
   },
   locationText: {
     fontSize: 12,
+  },
+  emptyFeaturedBox: {
+    width: '100%',
+    paddingVertical: SPACING.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  emptyFeaturedText: {
+    fontSize: 12,
+    fontWeight: '500',
+    textAlign: 'center',
   },
 });

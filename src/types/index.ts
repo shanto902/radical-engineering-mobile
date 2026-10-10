@@ -25,6 +25,7 @@ export interface Product {
   wattage?: string;
   voltage?: string;
   warranty?: string;
+  weight?: string;
   description: string;
   rawDescription?: string;
   shortDescription?: string;
@@ -217,5 +218,39 @@ export interface BrandPartner {
   name: string;
   logo?: string;
   link?: string;
+}
+
+export interface ExtraCharge {
+  name: string;
+  amount: number;
+  title?: string;
+  label?: string;
+  value?: number;
+  price?: number;
+}
+
+export interface DirectusSettings {
+  last_revalidate_time?: string | number | null;
+  delivery_charge?: number | null;
+  per_kg_charge?: number | null;
+  [key: string]: any;
+}
+
+export interface PaginatedProductsResponse {
+  products: Product[];
+  totalCount: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+}
+
+export interface GetProductsParams {
+  page?: number;
+  limit?: number;
+  categoryId?: string;
+  brand?: string;
+  search?: string;
+  sortBy?: 'default' | 'price_asc' | 'price_desc';
+  forceRefresh?: boolean;
 }
 

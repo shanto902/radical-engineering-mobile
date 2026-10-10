@@ -33,12 +33,28 @@ interface ProductDetailScreenProps {
 type DetailTab = "overview" | "specs" | "support";
 type SupportSubTab = "manuals" | "warranty";
 
+const getSpecIcon = (key: string): keyof typeof Ionicons.glyphMap => {
+  const k = key.toLowerCase();
+  if (k.includes("weight")) return "scale-outline";
+  if (k.includes("brand")) return "pricetag-outline";
+  if (k.includes("model") || k.includes("sku")) return "barcode-outline";
+  if (k.includes("category")) return "grid-outline";
+  if (k.includes("warranty")) return "shield-checkmark-outline";
+  if (k.includes("stock")) return "cube-outline";
+  if (k.includes("datasheet") || k.includes("pdf")) return "document-text-outline";
+  if (k.includes("manual")) return "book-outline";
+  if (k.includes("dimension")) return "resize-outline";
+  if (k.includes("voltage")) return "flash-outline";
+  if (k.includes("power") || k.includes("watt")) return "flash";
+  return "hardware-chip-outline";
+};
+
 export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
   navigation,
   route,
 }) => {
   const { colors, isDark } = useTheme();
-  const { addToCart, toggleWishlist, isWishlisted } = useCart();
+  const { addToCart, toggleWishlist, isWishlisted, hideToast } = useCart();
   const { productId } = route.params;
   const insets = useSafeAreaInsets();
   const bottomPadding = Math.max(
@@ -98,6 +114,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
   }
 
   const wishlisted = isWishlisted(product.id);
+  const isCallForPrice = !product.price || product.price <= 0;
   const allImages =
     product.images && product.images.length > 0
       ? product.images
@@ -108,9 +125,12 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
 
   const handleShare = async () => {
     try {
+      const priceText = isCallForPrice
+        ? "Call for Price"
+        : `${APP_CONFIG.currency} ${product.price.toLocaleString()}`;
       await Share.share({
         title: product.title,
-        message: `${product.title} - ${APP_CONFIG.currency} ${product.price.toLocaleString()}\nAvailable at Radical Engineering (${APP_CONFIG.website})`,
+        message: `${product.title} - ${priceText}\nAvailable at Radical Engineering (${APP_CONFIG.website})`,
       });
     } catch {
       // ignore
@@ -118,8 +138,14 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
   };
 
   const handleWhatsAppConsult = () => {
+    const priceText = isCallForPrice
+      ? "Call for Price (Quote Needed)"
+      : `${APP_CONFIG.currency} ${product.price.toLocaleString()}`;
+    const inquiryText = isCallForPrice
+      ? "Please share the latest price quote, availability, and delivery/installation details."
+      : "Please confirm availability, warranty, and delivery/installation details to my location.";
     const message = encodeURIComponent(
-      `Hello Radical Engineering,\n\nI am interested in:\nProduct: ${product.title}\nBrand: ${product.brand}\nSKU: ${product.sku || product.model}\nPrice: ${APP_CONFIG.currency} ${product.price.toLocaleString()}\n\nPlease confirm availability, warranty, and delivery/installation details to my location.`,
+      `Hello Radical Engineering,\n\nI am interested in:\nProduct: ${product.title}\nBrand: ${product.brand || 'Radical Engineering'}\nSKU: ${product.sku || product.model}\nPrice: ${priceText}\n\n${inquiryText}`,
     );
     Linking.openURL(
       `https://wa.me/${APP_CONFIG.whatsappNumber.replace("+", "")}?text=${message}`,
@@ -166,7 +192,9 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
   };
 
   const handleAddToCartAndCart = () => {
-    addToCart(product, quantity);
+    if (isCallForPrice) return;
+    hideToast();
+    addToCart(product, quantity, undefined, false);
     navigation.navigate("Cart");
   };
 
@@ -175,8 +203,8 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
       <Header
         showBack
         onBack={() => navigation.goBack()}
-        title={product.brand}
-        subtitle={product.categoryName}
+        title={product.brand || product.categoryName || product.title}
+        subtitle={product.brand ? product.categoryName : undefined}
         onOpenCart={() => navigation.navigate("Cart")}
       />
 
@@ -285,6 +313,13 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
               <View style={styles.wattagePill}>
                 <Ionicons name="flash" size={13} color="#FFFFFF" />
                 <Text style={styles.wattagePillText}>{product.wattage}</Text>
+              </View>
+            ) : null}
+
+            {!product.wattage && (product.weight || product.specs['Weight']) ? (
+              <View style={styles.weightPill}>
+                <Ionicons name="scale-outline" size={12} color="#FFFFFF" />
+                <Text style={styles.weightPillText}>{product.weight || product.specs['Weight']}</Text>
               </View>
             ) : null}
 
@@ -415,20 +450,22 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
         <View style={styles.infoWrapper}>
           {/* Brand & SKU Header */}
           <View style={styles.brandRow}>
-            <View
-              style={[
-                styles.brandTagWrapper,
-                {
-                  backgroundColor: isDark
-                    ? "rgba(252, 185, 116, 0.15)"
-                    : "#F5EBE6",
-                },
-              ]}
-            >
-              <Text style={[styles.brandTagText, { color: colors.primary }]}>
-                {product.brand}
-              </Text>
-            </View>
+            {product.brand ? (
+              <View
+                style={[
+                  styles.brandTagWrapper,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(252, 185, 116, 0.15)"
+                      : "#F5EBE6",
+                  },
+                ]}
+              >
+                <Text style={[styles.brandTagText, { color: colors.primary }]}>
+                  {product.brand}
+                </Text>
+              </View>
+            ) : null}
             {product.sku ? (
               <Text style={[styles.skuText, { color: colors.textMuted }]}>
                 SKU: {product.sku}
@@ -478,7 +515,7 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
                       { color: colors.textSecondary },
                     ]}
                   >
-                    Special Price
+                    {!isCallForPrice ? "Special Price" : "Pricing Notice"}
                   </Text>
                   {product.inStock ? (
                     <View style={styles.inStockBadgeMini}>
@@ -492,111 +529,198 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
                   )}
                 </View>
 
-                <View style={styles.priceNumbersRow}>
-                  <Text
-                    style={[styles.currencySymbol, { color: colors.primary }]}
-                  >
-                    {APP_CONFIG.currency}
-                  </Text>
-                  <Text style={[styles.priceAmount, { color: colors.primary }]}>
-                    {product.price.toLocaleString()}
-                  </Text>
-                </View>
-
-                {product.originalPrice &&
-                product.originalPrice > product.price ? (
-                  <View style={styles.savingsRowInline}>
-                    <Text
-                      style={[
-                        styles.strikeThroughPrice,
-                        { color: colors.textMuted },
-                      ]}
-                    >
-                      {APP_CONFIG.currency}{" "}
-                      {product.originalPrice.toLocaleString()}
-                    </Text>
-                    <View style={styles.saveTag}>
-                      <Text style={styles.saveTagText}>
-                        SAVE {APP_CONFIG.currency}{" "}
-                        {(
-                          product.originalPrice - product.price
-                        ).toLocaleString()}
+                {!isCallForPrice ? (
+                  <>
+                    <View style={styles.priceNumbersRow}>
+                      <Text
+                        style={[styles.currencySymbol, { color: colors.primary }]}
+                      >
+                        {APP_CONFIG.currency}
+                      </Text>
+                      <Text style={[styles.priceAmount, { color: colors.primary }]}>
+                        {product.price.toLocaleString()}
                       </Text>
                     </View>
-                  </View>
+
+                    {product.originalPrice &&
+                    product.originalPrice > product.price ? (
+                      <View style={styles.savingsRowInline}>
+                        <Text
+                          style={[
+                            styles.strikeThroughPrice,
+                            { color: colors.textMuted },
+                          ]}
+                        >
+                          {APP_CONFIG.currency}{" "}
+                          {product.originalPrice.toLocaleString()}
+                        </Text>
+                        <View style={styles.saveTag}>
+                          <Text style={styles.saveTagText}>
+                            SAVE {APP_CONFIG.currency}{" "}
+                            {(
+                              product.originalPrice - product.price
+                            ).toLocaleString()}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : (
+                      <Text
+                        style={[
+                          styles.priceVatNote,
+                          { color: colors.textSecondary },
+                        ]}
+                      >
+                        Official Price • VAT Included
+                      </Text>
+                    )}
+                  </>
                 ) : (
+                  <>
+                    <View style={styles.callForPriceRow}>
+                      <Ionicons name="call" size={17} color={colors.primary} />
+                      <Text style={[styles.callForPriceMainText, { color: colors.primary }]}>
+                        Call for Price
+                      </Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.priceVatNote,
+                        { color: colors.textSecondary },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      Official Quote • Expert Support
+                    </Text>
+                  </>
+                )}
+              </View>
+
+              {/* Right Column: Quantity Stepper or Direct Call Button */}
+              {!isCallForPrice ? (
+                <View style={styles.priceRightCol}>
                   <Text
                     style={[
-                      styles.priceVatNote,
+                      styles.qtyLabelMini,
                       { color: colors.textSecondary },
                     ]}
                   >
-                    Official Price • VAT Included
+                    QUANTITY
                   </Text>
-                )}
-              </View>
-
-              {/* Right Column: Quantity Stepper & Dynamic Total */}
-              <View style={styles.priceRightCol}>
-                <Text
-                  style={[
-                    styles.qtyLabelMini,
-                    { color: colors.textSecondary },
-                  ]}
-                >
-                  QUANTITY
-                </Text>
-                <View
-                  style={[
-                    styles.stepperBox,
-                    {
-                      borderColor: colors.border,
-                      backgroundColor: colors.surfaceVariant,
-                    },
-                  ]}
-                >
-                  <TouchableOpacity
-                    onPress={() => setQuantity(Math.max(1, quantity - 1))}
-                    style={styles.stepperBtn}
-                    activeOpacity={0.7}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    accessibilityLabel="Decrease quantity"
-                  >
-                    <Ionicons name="remove" size={16} color={colors.text} />
-                  </TouchableOpacity>
-                  <Text style={[styles.stepperVal, { color: colors.text }]}>
-                    {quantity}
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => setQuantity(quantity + 1)}
-                    style={styles.stepperBtn}
-                    activeOpacity={0.7}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    accessibilityLabel="Increase quantity"
-                  >
-                    <Ionicons name="add" size={16} color={colors.text} />
-                  </TouchableOpacity>
-                </View>
-
-                {quantity > 1 ? (
-                  <Text
-                    style={[styles.totalSubtext, { color: colors.primary }]}
-                  >
-                    Total: {APP_CONFIG.currency}{" "}
-                    {(product.price * quantity).toLocaleString()}
-                  </Text>
-                ) : (
-                  <Text
+                  <View
                     style={[
-                      styles.totalSubtextMuted,
-                      { color: colors.textMuted },
+                      styles.stepperBox,
+                      {
+                        borderColor: colors.border,
+                        backgroundColor: colors.surfaceVariant,
+                      },
                     ]}
                   >
-                    Unit price
+                    <TouchableOpacity
+                      onPress={() => setQuantity(Math.max(1, quantity - 1))}
+                      style={styles.stepperBtn}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      accessibilityLabel="Decrease quantity"
+                    >
+                      <Ionicons name="remove" size={16} color={colors.text} />
+                    </TouchableOpacity>
+                    <Text style={[styles.stepperVal, { color: colors.text }]}>
+                      {quantity}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => setQuantity(quantity + 1)}
+                      style={styles.stepperBtn}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      accessibilityLabel="Increase quantity"
+                    >
+                      <Ionicons name="add" size={16} color={colors.text} />
+                    </TouchableOpacity>
+                  </View>
+
+                  {quantity > 1 ? (
+                    <Text
+                      style={[styles.totalSubtext, { color: colors.primary }]}
+                    >
+                      Total: {APP_CONFIG.currency}{" "}
+                      {(product.price * quantity).toLocaleString()}
+                    </Text>
+                  ) : (
+                    <Text
+                      style={[
+                        styles.totalSubtextMuted,
+                        { color: colors.textMuted },
+                      ]}
+                    >
+                      Unit price
+                    </Text>
+                  )}
+                </View>
+              ) : (
+                <View style={styles.priceRightColCall}>
+                  <Text
+                    style={[
+                      styles.qtyLabelMini,
+                      { color: colors.textSecondary },
+                    ]}
+                  >
+                    DIRECT HOTLINE
                   </Text>
-                )}
-              </View>
+                  <TouchableOpacity
+                    style={[styles.cardCallHotlineBtn, { backgroundColor: colors.primary }]}
+                    onPress={handleCallHotline}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="call" size={13} color={isDark ? "#260B00" : "#FFFFFF"} />
+                    <Text style={[styles.cardCallHotlineText, { color: isDark ? "#260B00" : "#FFFFFF" }]}>
+                      Call Hotline
+                    </Text>
+                  </TouchableOpacity>
+                  <Text style={[styles.hotlineNumberSubtext, { color: colors.textMuted }]} numberOfLines={1}>
+                    {APP_CONFIG.hotline1}
+                  </Text>
+                </View>
+              )}
             </View>
+
+            {/* Dedicated Warranty Field: Keeps full space for various manufacturer policies */}
+            {product.warranty ? (
+              <View
+                style={[
+                  styles.warrantyDedicatedRow,
+                  {
+                    backgroundColor: isDark
+                      ? "rgba(22, 163, 74, 0.12)"
+                      : "#F0FDF4",
+                    borderColor: isDark
+                      ? "rgba(22, 163, 74, 0.28)"
+                      : "#BBF7D0",
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="shield-checkmark"
+                  size={16}
+                  color="#16A34A"
+                  style={{ marginTop: 1 }}
+                />
+                <View style={styles.warrantyTextCol}>
+                  <Text
+                    style={[
+                      styles.warrantyLeadText,
+                      { color: isDark ? "#4ADE80" : "#15803D" },
+                    ]}
+                  >
+                    OFFICIAL WARRANTY
+                  </Text>
+                  <Text
+                    style={[styles.warrantyBodyText, { color: colors.text }]}
+                  >
+                    {product.warranty}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
 
             {/* Bottom Guarantee & Trust Badges Strip */}
             <View
@@ -614,28 +738,11 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
                     styles.trustItemText,
                     { color: colors.text },
                   ]}
+                  numberOfLines={1}
                 >
                   Verified Equipment
                 </Text>
               </View>
-
-              {product.warranty ? (
-                <View
-                  style={[
-                    styles.warrantyFooterBadge,
-                    {
-                      backgroundColor: isDark
-                        ? "rgba(21, 128, 61, 0.15)"
-                        : "#DCFCE7",
-                    },
-                  ]}
-                >
-                  <Ionicons name="ribbon-outline" size={12} color="#15803D" />
-                  <Text style={styles.warrantyFooterText}>
-                    {product.warranty}
-                  </Text>
-                </View>
-              ) : null}
 
               <View style={styles.trustItem}>
                 <Ionicons
@@ -648,8 +755,26 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
                     styles.trustItemText,
                     { color: colors.textSecondary },
                   ]}
+                  numberOfLines={1}
                 >
                   Tech Support
+                </Text>
+              </View>
+
+              <View style={styles.trustItem}>
+                <Ionicons
+                  name="cube-outline"
+                  size={13}
+                  color="#0284C7"
+                />
+                <Text
+                  style={[
+                    styles.trustItemText,
+                    { color: colors.textSecondary },
+                  ]}
+                  numberOfLines={1}
+                >
+                  Genuine Dispatch
                 </Text>
               </View>
             </View>
@@ -842,6 +967,99 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
           {/* TAB 2: TECHNICAL SPECIFICATIONS */}
           {activeTab === "specs" && (
             <View style={styles.tabContentContainer}>
+              {/* Quick Specs Highlight Cards */}
+              {(product.weight || product.specs['Weight'] || product.wattage || product.warranty) ? (
+                <View style={styles.quickSpecsGrid}>
+                  {(product.weight || product.specs['Weight']) ? (
+                    <View
+                      style={[
+                        styles.quickSpecCard,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <View style={[styles.quickSpecIconWrap, { backgroundColor: isDark ? "rgba(234, 88, 12, 0.2)" : "#FFF7ED" }]}>
+                        <Ionicons name="scale-outline" size={18} color="#EA580C" />
+                      </View>
+                      <View style={styles.quickSpecTextCol}>
+                        <Text style={[styles.quickSpecLabel, { color: colors.textSecondary }]}>Weight</Text>
+                        <Text style={[styles.quickSpecValue, { color: colors.text }]} numberOfLines={1}>
+                          {product.weight || product.specs['Weight']}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {product.wattage ? (
+                    <View
+                      style={[
+                        styles.quickSpecCard,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <View style={[styles.quickSpecIconWrap, { backgroundColor: isDark ? "rgba(245, 158, 11, 0.2)" : "#FEF3C7" }]}>
+                        <Ionicons name="flash" size={18} color="#D97706" />
+                      </View>
+                      <View style={styles.quickSpecTextCol}>
+                        <Text style={[styles.quickSpecLabel, { color: colors.textSecondary }]}>Wattage</Text>
+                        <Text style={[styles.quickSpecValue, { color: colors.text }]} numberOfLines={1}>
+                          {product.wattage}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {product.warranty ? (
+                    <View
+                      style={[
+                        styles.quickSpecCard,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <View style={[styles.quickSpecIconWrap, { backgroundColor: isDark ? "rgba(22, 163, 74, 0.2)" : "#DCFCE7" }]}>
+                        <Ionicons name="shield-checkmark" size={18} color="#16A34A" />
+                      </View>
+                      <View style={styles.quickSpecTextCol}>
+                        <Text style={[styles.quickSpecLabel, { color: colors.textSecondary }]}>Warranty</Text>
+                        <Text style={[styles.quickSpecValue, { color: colors.text }]} numberOfLines={1}>
+                          {product.warranty}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {product.model ? (
+                    <View
+                      style={[
+                        styles.quickSpecCard,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <View style={[styles.quickSpecIconWrap, { backgroundColor: isDark ? "rgba(2, 132, 199, 0.2)" : "#E0F2FE" }]}>
+                        <Ionicons name="barcode-outline" size={18} color="#0284C7" />
+                      </View>
+                      <View style={styles.quickSpecTextCol}>
+                        <Text style={[styles.quickSpecLabel, { color: colors.textSecondary }]}>Model / SKU</Text>
+                        <Text style={[styles.quickSpecValue, { color: colors.text }]} numberOfLines={1}>
+                          {product.model}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+
               <View
                 style={[
                   styles.cardSection,
@@ -869,35 +1087,51 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
                   ]}
                 >
                   {Object.entries(product.specs).map(
-                    ([specKey, specVal], idx) => (
-                      <View
-                        key={specKey}
-                        style={[
-                          styles.specsTableRow,
-                          {
-                            backgroundColor:
-                              idx % 2 === 0
-                                ? colors.surface
-                                : colors.surfaceVariant,
-                            borderBottomColor: colors.border,
-                          },
-                        ]}
-                      >
-                        <Text
+                    ([specKey, specVal], idx) => {
+                      const isWeight = specKey.toLowerCase().includes("weight");
+                      return (
+                        <View
+                          key={specKey}
                           style={[
-                            styles.specKeyText,
-                            { color: colors.textSecondary },
+                            styles.specsTableRow,
+                            {
+                              backgroundColor:
+                                idx % 2 === 0
+                                  ? colors.surface
+                                  : colors.surfaceVariant,
+                              borderBottomColor: colors.border,
+                            },
                           ]}
                         >
-                          {decodeEntities(specKey)}
-                        </Text>
-                        <Text
-                          style={[styles.specValueText, { color: colors.text }]}
-                        >
-                          {decodeEntities(specVal)}
-                        </Text>
-                      </View>
-                    ),
+                          <View style={styles.specKeyCol}>
+                            <Ionicons
+                              name={getSpecIcon(specKey)}
+                              size={14}
+                              color={isWeight ? "#EA580C" : colors.primary}
+                              style={styles.specKeyIcon}
+                            />
+                            <Text
+                              style={[
+                                styles.specKeyText,
+                                { color: isWeight ? (isDark ? "#FB923C" : "#C2410C") : colors.textSecondary },
+                                isWeight && { fontWeight: "700" },
+                              ]}
+                            >
+                              {decodeEntities(specKey)}
+                            </Text>
+                          </View>
+                          <Text
+                            style={[
+                              styles.specValueText,
+                              { color: colors.text },
+                              isWeight && styles.specWeightValue,
+                            ]}
+                          >
+                            {decodeEntities(specVal)}
+                          </Text>
+                        </View>
+                      );
+                    },
                   )}
                 </View>
               </View>
@@ -1414,41 +1648,72 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
           },
         ]}
       >
-        <TouchableOpacity
-          style={styles.whatsAppActionBtn}
-          onPress={handleWhatsAppConsult}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
-          <Text style={styles.whatsAppActionText}>WhatsApp</Text>
-        </TouchableOpacity>
+        {!isCallForPrice ? (
+          <>
+            <TouchableOpacity
+              style={styles.whatsAppActionBtn}
+              onPress={handleWhatsAppConsult}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="logo-whatsapp" size={18} color="#FFFFFF" />
+              <Text style={styles.whatsAppActionText}>WhatsApp</Text>
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[
-            styles.addToCartActionBtn,
-            { backgroundColor: isDark ? "#1E293B" : "#0F172A" },
-          ]}
-          onPress={() => addToCart(product, quantity)}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="cart" size={18} color="#FFFFFF" />
-          <Text style={styles.addToCartActionText}>Add to Cart</Text>
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.addToCartActionBtn,
+                { backgroundColor: isDark ? "#1E293B" : "#0F172A" },
+              ]}
+              onPress={() => addToCart(product, quantity)}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="cart" size={18} color="#FFFFFF" />
+              <Text style={styles.addToCartActionText}>Add to Cart</Text>
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.buyNowActionBtn, { backgroundColor: colors.primary }]}
-          onPress={handleAddToCartAndCart}
-          activeOpacity={0.85}
-        >
-          <Text
-            style={[
-              styles.buyNowActionText,
-              { color: isDark ? "#260B00" : "#FFFFFF" },
-            ]}
-          >
-            Buy Now
-          </Text>
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.buyNowActionBtn, { backgroundColor: colors.primary }]}
+              onPress={handleAddToCartAndCart}
+              activeOpacity={0.85}
+            >
+              <Text
+                style={[
+                  styles.buyNowActionText,
+                  { color: isDark ? "#260B00" : "#FFFFFF" },
+                ]}
+              >
+                Buy Now
+              </Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <TouchableOpacity
+              style={styles.whatsAppCallForPriceBtn}
+              onPress={handleWhatsAppConsult}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="logo-whatsapp" size={18} color="#FFFFFF" />
+              <Text style={styles.actionBtnCallText}>WhatsApp Inquiry</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.callForPriceActionBtn, { backgroundColor: colors.primary }]}
+              onPress={handleCallHotline}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="call" size={18} color={isDark ? "#260B00" : "#FFFFFF"} />
+              <Text
+                style={[
+                  styles.actionBtnCallText,
+                  { color: isDark ? "#260B00" : "#FFFFFF" },
+                ]}
+              >
+                Call for Price
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       {/* High-Resolution Gesture Zoom Modal */}
@@ -1659,6 +1924,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
   },
+  weightPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#EA580C",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: RADIUS.sm,
+    gap: 4,
+  },
+  weightPillText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "800",
+  },
   subCatPill: {
     backgroundColor: "#0F172A",
     paddingHorizontal: 10,
@@ -1849,8 +2128,40 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginTop: 3,
   },
+  callForPriceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    height: 36,
+  },
+  callForPriceMainText: {
+    fontSize: 20,
+    fontWeight: "900",
+    letterSpacing: -0.3,
+  },
   priceRightCol: {
     alignItems: "flex-end",
+  },
+  priceRightColCall: {
+    alignItems: "flex-end",
+  },
+  cardCallHotlineBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    height: 36,
+    borderRadius: RADIUS.md,
+    gap: 6,
+  },
+  cardCallHotlineText: {
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  hotlineNumberSubtext: {
+    fontSize: 10,
+    fontWeight: "600",
+    marginTop: 4,
   },
   qtyLabelMini: {
     fontSize: 10,
@@ -1887,35 +2198,49 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginTop: 4,
   },
+  warrantyDedicatedRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    marginTop: 8,
+    marginBottom: 6,
+    gap: 8,
+  },
+  warrantyTextCol: {
+    flex: 1,
+  },
+  warrantyLeadText: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    marginBottom: 2,
+  },
+  warrantyBodyText: {
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 17,
+  },
   priceCardFooter: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     borderTopWidth: 1,
     paddingTop: 10,
-    marginTop: 2,
+    marginTop: 4,
+    gap: 6,
   },
   trustItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+    flexShrink: 1,
   },
   trustItemText: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: "700",
-  },
-  warrantyFooterBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 2.5,
-    borderRadius: RADIUS.sm,
-    gap: 4,
-  },
-  warrantyFooterText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#15803D",
   },
   tabBar: {
     flexDirection: "row",
@@ -1987,6 +2312,43 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     flex: 1,
   },
+  quickSpecsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: SPACING.md,
+  },
+  quickSpecCard: {
+    flex: 1,
+    minWidth: "47%",
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 10,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    gap: 10,
+  },
+  quickSpecIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: RADIUS.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickSpecTextCol: {
+    flex: 1,
+  },
+  quickSpecLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  quickSpecValue: {
+    fontSize: 13,
+    fontWeight: "800",
+  },
   specsTableContainer: {
     borderWidth: 1,
     borderRadius: RADIUS.md,
@@ -1995,12 +2357,22 @@ const styles = StyleSheet.create({
   },
   specsTableRow: {
     flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
   },
-  specKeyText: {
+  specKeyCol: {
     flex: 1.2,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingRight: 6,
+  },
+  specKeyIcon: {
+    marginRight: 6,
+  },
+  specKeyText: {
+    flex: 1,
     fontSize: 12,
     fontWeight: "500",
   },
@@ -2008,6 +2380,10 @@ const styles = StyleSheet.create({
     flex: 1.5,
     fontSize: 12,
     fontWeight: "700",
+  },
+  specWeightValue: {
+    fontWeight: "900",
+    color: "#EA580C",
   },
   supportContactBox: {
     padding: SPACING.md,
@@ -2066,17 +2442,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1.5,
-    borderColor: "#25D366",
+    backgroundColor: "#25D366",
     borderRadius: RADIUS.md,
     paddingHorizontal: 12,
     height: 46,
     gap: 6,
   },
   whatsAppActionText: {
-    color: "#25D366",
+    color: "#FFFFFF",
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "700",
   },
   addToCartActionBtn: {
     flex: 1,
@@ -2105,6 +2480,30 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 13,
     fontWeight: "800",
+  },
+  whatsAppCallForPriceBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#25D366",
+    borderRadius: RADIUS.md,
+    height: 46,
+    gap: 8,
+  },
+  callForPriceActionBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: RADIUS.md,
+    height: 46,
+    gap: 8,
+  },
+  actionBtnCallText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
   },
   docListContainer: {
     marginTop: 6,

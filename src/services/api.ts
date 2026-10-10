@@ -1,7 +1,26 @@
-import { createDirectus, rest, staticToken, readItems, readItem, createItem, createItems } from '@directus/sdk';
+import { createDirectus, rest, staticToken, readItems, readItem, createItem, createItems, readSingleton } from '@directus/sdk';
 import { APP_CONFIG } from '../constants/config';
-import { CATEGORIES, PRODUCTS, PROJECTS, ELEARNING_ARTICLES, SAMPLE_ORDERS } from '../constants/mockData';
-import { Product, ProductDoc, Category, Project, ELearningArticle, Order, TrackedOrder, TrackedOrderItem, GoogleReview, GoogleReviewsSummary, BannerItem, BrandPartner } from '../types';
+import { CATEGORIES, PROJECTS, ELEARNING_ARTICLES, SAMPLE_ORDERS } from '../constants/mockData';
+import {
+  Product,
+  ProductDoc,
+  Category,
+  Project,
+  ELearningArticle,
+  Order,
+  TrackedOrder,
+  TrackedOrderItem,
+  GoogleReview,
+  GoogleReviewsSummary,
+  BannerItem,
+  BrandPartner,
+  DirectusSettings,
+  PaginatedProductsResponse,
+  GetProductsParams,
+  ExtraCharge,
+} from '../types';
+import { storageService } from './storage';
+import { realtimeService } from './realtime';
 
 export interface CreateOrderItem {
   id: string;
@@ -16,6 +35,8 @@ export interface CreateOrderParams {
   address: string;
   notes?: string;
   total: number;
+  deliveryCharge?: number;
+  extraCharges?: ExtraCharge[];
   items: CreateOrderItem[];
 }
 
@@ -104,6 +125,24 @@ function extractWattage(title: string): string | undefined {
 }
 
 /**
+ * Concise warranty string for compact mobile badges/pills
+ * Strips verbose parenthetical policy details while keeping duration
+ * e.g. "5 years (Manufacturer policy)" -> "5 years Warranty"
+ */
+export function formatBadgeWarranty(warranty?: string): string {
+  if (!warranty) return '';
+  let cleaned = warranty.replace(/\s*\([^)]*\)/g, '').trim();
+  if (
+    cleaned &&
+    !cleaned.toLowerCase().includes('warrant') &&
+    !cleaned.toLowerCase().includes('warrent')
+  ) {
+    cleaned = `${cleaned} Warranty`;
+  }
+  return cleaned || warranty;
+}
+
+/**
  * Parse Directus file reference into a ProductDoc object
  */
 function parseDocument(
@@ -141,6 +180,37 @@ class ApiService {
   private categoriesMap: Record<number | string, { id: number; name: string; slug: string }> = {};
   private brandsMap: Record<number | string, string> = {};
   private metadataLoaded = false;
+
+  // Settings & Revalidation cache
+  private cachedSettings: DirectusSettings | null = null;
+  private settingsCacheTime = 0;
+  private currentRevalidateTime: string | null = null;
+
+  // Paginated product query cache: key -> { data, timestamp }
+  private productsQueryCache = new Map<string, { data: PaginatedProductsResponse; timestamp: number }>();
+
+  constructor() {
+    // Listen to real-time events from Directus via WebSocket
+    realtimeService.onUpdate((event) => {
+      if (event.collection === 'products' || event.collection === 'settings') {
+        this.clearProductsMemoryCache();
+        if (event.collection === 'settings') {
+          this.getSettings(true).catch(() => {});
+        }
+      }
+    });
+
+    // Restore cached revalidation timestamp from local device storage
+    storageService.getLastRevalidateTime().then((time) => {
+      if (time) {
+        this.currentRevalidateTime = time;
+      }
+    });
+  }
+
+  clearProductsMemoryCache() {
+    this.productsQueryCache.clear();
+  }
 
   private async loadMetadata(): Promise<void> {
     if (this.metadataLoaded) return;
@@ -194,7 +264,18 @@ class ApiService {
   }
 
   private mapDirectusProduct(item: any): Product {
-    const brandName = this.brandsMap[item.brand] || (typeof item.brand === 'string' ? item.brand : 'Radical Engineering');
+    let brandName = this.brandsMap[item.brand] || (typeof item.brand === 'string' ? item.brand : '');
+    if (brandName) {
+      const lower = brandName.toLowerCase().trim();
+      if (
+        lower === 'no brand' ||
+        lower === 'nobrand' ||
+        lower === 'no-brand' ||
+        lower === 'radical engineering'
+      ) {
+        brandName = '';
+      }
+    }
     const catInfo = this.categoriesMap[item.category] || { id: 1, name: 'Solar Equipment', slug: 'solar-panels' };
 
     const richDescription = (item.description && String(item.description).trim())
@@ -223,12 +304,22 @@ class ApiService {
     if (item.sku) specsMap['Model / SKU'] = item.sku;
     specsMap['Category'] = catInfo.name;
     if (item.sub_category) specsMap['Sub-Category'] = item.sub_category;
+
+    // Weight specification
+    let formattedWeight: string | undefined = undefined;
+    const rawWeightVal = item.weight ?? item.product_weight ?? item.net_weight;
+    if (rawWeightVal !== undefined && rawWeightVal !== null && String(rawWeightVal).trim() !== '' && String(rawWeightVal).trim() !== '0') {
+      const rawWeight = String(rawWeightVal).trim();
+      formattedWeight = !isNaN(Number(rawWeight)) ? `${rawWeight} kg` : rawWeight;
+      specsMap['Weight'] = formattedWeight;
+    }
+
     let formattedWarranty: string | undefined = undefined;
     if (item.warranty && String(item.warranty).trim()) {
       const w = String(item.warranty).trim();
       formattedWarranty = w.toLowerCase().includes('warrant') || w.toLowerCase().includes('warrent')
         ? w
-        : `${w} Warranty`;
+        : (w.includes('(') ? w.replace(/\s*\(/, ' Warranty (') : `${w} Warranty`);
       specsMap['Warranty'] = formattedWarranty;
     }
     specsMap['Stock Status'] = item.status === 'in-stock'
@@ -247,7 +338,7 @@ class ApiService {
       specsMap['User Manual (PDF)'] = manualDoc.filename || 'Available';
     }
 
-    const mainImgUrl = item.image ? `${this.assetsUrl}/${item.image}` : PRODUCTS[0].image;
+    const mainImgUrl = item.image ? `${this.assetsUrl}/${item.image}` : '';
     const galleryUrls: string[] = [];
     if (mainImgUrl) {
       galleryUrls.push(mainImgUrl);
@@ -294,12 +385,13 @@ class ApiService {
       wattage: extractedW,
       voltage: undefined,
       warranty: formattedWarranty,
+      weight: formattedWeight,
       description: cleanDesc.length > 10 ? cleanDesc : `${item.name || 'Solar Equipment'}. Distributed and backed by Radical Engineering, Kishoreganj.`,
       rawDescription: richDescription.length > 5 ? richDescription : undefined,
       shortDescription: shortDesc,
       subCategory: item.sub_category,
       sku: item.sku,
-      tags: item.tags || [brandName, catInfo.name],
+      tags: item.tags || (brandName ? [brandName, catInfo.name] : [catInfo.name]),
       features: featuresList,
       specs: specsMap,
       isFeatured: true,
@@ -344,65 +436,322 @@ class ApiService {
     return 'construct-outline';
   }
 
-  async getProducts(categoryId?: string, search?: string): Promise<Product[]> {
-    await this.loadMetadata();
+  /**
+   * Fetch Directus settings singleton (contains delivery_charge and last_revalidate_time)
+   */
+  async getSettings(forceRefresh = false): Promise<DirectusSettings> {
+    if (!forceRefresh && this.cachedSettings && Date.now() - this.settingsCacheTime < 60000) {
+      return this.cachedSettings;
+    }
+
     try {
-      const query: any = {
-        limit: 100,
-        fields: ['*', 'datasheet.*', 'user_manual.*', 'image_gallery.*', 'image_gallery.directus_files_id.*'],
-      };
-
-      // Map slug or ID filter
-      if (categoryId && categoryId !== 'all') {
-        const catObj = this.categoriesMap[categoryId];
-        if (catObj) {
-          query.filter = { category: { _eq: catObj.id } };
-        }
-      }
-
-      if (search && search.trim() !== '') {
-        query.search = search.trim();
-      }
-
+      // 1. Directus SDK readSingleton
       const data: any = await Promise.race([
-        directus.request(readItems('products' as any, query)),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 4500)),
+        directus.request(readSingleton('settings' as any, { fields: ['*'] } as any)),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 4000)),
       ]);
 
-      if (Array.isArray(data) && data.length > 0) {
-        let mapped = data.map((item: any) => this.mapDirectusProduct(item));
-        if (search && search.trim() !== '') {
-          const q = search.toLowerCase();
-          mapped = mapped.filter(
-            p =>
-              p.title.toLowerCase().includes(q) ||
-              p.brand.toLowerCase().includes(q) ||
-              p.categoryName.toLowerCase().includes(q) ||
-              p.description.toLowerCase().includes(q) ||
-              (p.wattage && p.wattage.toLowerCase().includes(q))
-          );
-        }
-        return mapped;
+      if (data && typeof data === 'object') {
+        const rawPerKg = data.per_kg_charge ?? data.delivery_per_kg_charge ?? data.per_kg_delivery_charge;
+        const parsedPerKg = (rawPerKg !== undefined && rawPerKg !== null && !isNaN(Number(rawPerKg)))
+          ? Number(rawPerKg)
+          : 0;
+        const parsedDelivery = (data.delivery_charge !== undefined && data.delivery_charge !== null && !isNaN(Number(data.delivery_charge)))
+          ? Number(data.delivery_charge)
+          : 150;
+
+        const settings: DirectusSettings = {
+          ...data,
+          last_revalidate_time: data.last_revalidate_time ?? null,
+          delivery_charge: parsedDelivery,
+          per_kg_charge: parsedPerKg,
+        };
+        this.handleSettingsRevalidation(settings);
+        this.cachedSettings = settings;
+        this.settingsCacheTime = Date.now();
+        storageService.saveSettings(settings);
+        return settings;
       }
-    } catch {
-      // Offline fallback
+    } catch (err) {
+      // 2. Directus REST /items/settings fallback
+      try {
+        const resp = await fetch(`${APP_CONFIG.apiBaseUrl}/items/settings?fields=*`, {
+          headers: {
+            Authorization: `Bearer ${APP_CONFIG.accessToken}`,
+            Accept: 'application/json',
+          },
+        });
+        if (resp.ok) {
+          const json = await resp.json();
+          const d = json.data;
+          if (d && typeof d === 'object') {
+            const rawPerKg = d.per_kg_charge ?? d.delivery_per_kg_charge ?? d.per_kg_delivery_charge;
+            const parsedPerKg = (rawPerKg !== undefined && rawPerKg !== null && !isNaN(Number(rawPerKg)))
+              ? Number(rawPerKg)
+              : 0;
+            const parsedDelivery = (d.delivery_charge !== undefined && d.delivery_charge !== null && !isNaN(Number(d.delivery_charge)))
+              ? Number(d.delivery_charge)
+              : 150;
+
+            const settings: DirectusSettings = {
+              ...d,
+              last_revalidate_time: d.last_revalidate_time ?? null,
+              delivery_charge: parsedDelivery,
+              per_kg_charge: parsedPerKg,
+            };
+            this.handleSettingsRevalidation(settings);
+            this.cachedSettings = settings;
+            this.settingsCacheTime = Date.now();
+            storageService.saveSettings(settings);
+            return settings;
+          }
+        }
+      } catch (restErr) {
+        console.warn('REST fallback for settings failed:', restErr);
+      }
     }
 
-    let result = [...PRODUCTS];
+    // 3. Cached settings from AsyncStorage
+    const stored = await storageService.getSettings();
+    if (stored) {
+      this.cachedSettings = stored;
+      return stored;
+    }
+
+    // Default configuration
+    return {
+      last_revalidate_time: null,
+      delivery_charge: 150,
+      per_kg_charge: 0,
+    };
+  }
+
+  async getLastRevalidateTime(): Promise<string | null> {
+    const settings = await this.getSettings(true);
+    return settings.last_revalidate_time ? String(settings.last_revalidate_time) : null;
+  }
+
+  private handleSettingsRevalidation(settings: DirectusSettings) {
+    const remoteTime = settings.last_revalidate_time ? String(settings.last_revalidate_time) : null;
+    if (!remoteTime) return;
+
+    if (this.currentRevalidateTime && this.currentRevalidateTime !== remoteTime) {
+      // Remote revalidation timestamp changed! Invalidate local product query cache
+      this.clearProductsMemoryCache();
+    }
+    this.currentRevalidateTime = remoteTime;
+  }
+
+  /**
+   * Fetch paginated products with server-side Directus search, category/brand filters,
+   * price sorting, and meta total count. Reduces API pressure and memory usage.
+   */
+  async getProductsPaginated(params: GetProductsParams = {}): Promise<PaginatedProductsResponse> {
+    await this.loadMetadata();
+    const page = Math.max(1, params.page || 1);
+    const limit = Math.max(1, params.limit || 16);
+    const categoryId = params.categoryId || 'all';
+    const brand = params.brand || 'all';
+    const search = (params.search || '').trim();
+    const sortBy = params.sortBy || 'default';
+
+    // Verify cache validity with settings revalidation check
+    this.getSettings(false).catch(() => {});
+
+    // Check query cache (2 min cache unless forceRefresh)
+    const cacheKey = `prod_${categoryId}_${brand}_${search}_${sortBy}_${page}_${limit}`;
+    if (!params.forceRefresh && this.productsQueryCache.has(cacheKey)) {
+      const cached = this.productsQueryCache.get(cacheKey)!;
+      if (Date.now() - cached.timestamp < 120000) {
+        return cached.data;
+      }
+    }
+
+    // Build Directus Query
+    const query: any = {
+      page,
+      limit,
+      meta: ['filter_count', 'total_count'],
+      fields: ['*', 'datasheet.*', 'user_manual.*', 'image_gallery.*', 'image_gallery.directus_files_id.*'],
+    };
+
+    const filterConditions: any[] = [];
+
+    // 1. Server-side Category Filter
     if (categoryId && categoryId !== 'all') {
-      result = result.filter(p => p.categoryId === categoryId);
+      const catObj = this.categoriesMap[categoryId];
+      if (catObj) {
+        filterConditions.push({ category: { _eq: catObj.id } });
+      } else if (!isNaN(Number(categoryId))) {
+        filterConditions.push({ category: { _eq: Number(categoryId) } });
+      } else {
+        const found = Object.values(this.categoriesMap).find(
+          (c) =>
+            c.slug.toLowerCase() === categoryId.toLowerCase() ||
+            c.name.toLowerCase().includes(categoryId.toLowerCase())
+        );
+        if (found) {
+          filterConditions.push({ category: { _eq: found.id } });
+        }
+      }
     }
-    if (search && search.trim() !== '') {
-      const q = search.toLowerCase();
-      result = result.filter(
-        p =>
-          p.title.toLowerCase().includes(q) ||
-          p.brand.toLowerCase().includes(q) ||
-          p.categoryName.toLowerCase().includes(q) ||
-          (p.wattage && p.wattage.toLowerCase().includes(q))
+
+    // 2. Server-side Brand Filter
+    if (brand && brand !== 'all') {
+      const lowerBrand = brand.toLowerCase().trim();
+      let matchedBrandId: any = null;
+      for (const [id, name] of Object.entries(this.brandsMap)) {
+        if (name.toLowerCase().trim() === lowerBrand) {
+          matchedBrandId = id;
+          break;
+        }
+      }
+      if (matchedBrandId) {
+        filterConditions.push({
+          _or: [
+            { brand: { _eq: matchedBrandId } },
+            { brand: { _eq: Number(matchedBrandId) || matchedBrandId } },
+            { brand: { _icontains: brand } },
+          ],
+        });
+      } else {
+        filterConditions.push({ brand: { _icontains: brand } });
+      }
+    }
+
+    // Determine sort string/array
+    let sortStr = '-date_created,-id';
+    let sortArray = ['-date_created', '-id'];
+    if (sortBy === 'price_asc') {
+      sortStr = 'price';
+      sortArray = ['price'];
+    } else if (sortBy === 'price_desc') {
+      sortStr = '-price';
+      sortArray = ['-price'];
+    }
+
+    // 1. Preferred Method: REST endpoint with meta=* for complete total/filter counts
+    try {
+      const url = new URL(`${APP_CONFIG.apiBaseUrl}/items/products`);
+      url.searchParams.set('page', String(page));
+      url.searchParams.set('limit', String(limit));
+      url.searchParams.set('meta', '*');
+      url.searchParams.set(
+        'fields',
+        '*,datasheet.*,user_manual.*,image_gallery.*,image_gallery.directus_files_id.*'
       );
+      url.searchParams.set('sort', sortStr);
+
+      if (search) {
+        url.searchParams.set('search', search);
+      }
+
+      if (filterConditions.length === 1) {
+        url.searchParams.set('filter', JSON.stringify(filterConditions[0]));
+      } else if (filterConditions.length > 1) {
+        url.searchParams.set('filter', JSON.stringify({ _and: filterConditions }));
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+      const resp = await fetch(url.toString(), {
+        headers: {
+          Authorization: `Bearer ${APP_CONFIG.accessToken}`,
+          Accept: 'application/json',
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (resp.ok) {
+        const json = await resp.json();
+        const rawItems = Array.isArray(json.data) ? json.data : [];
+        const totalCount = Number(
+          json.meta?.filter_count ?? json.meta?.total_count ?? rawItems.length
+        );
+        const products = rawItems.map((item: any) => this.mapDirectusProduct(item));
+        const hasMore = page * limit < totalCount;
+
+        const result: PaginatedProductsResponse = {
+          products,
+          totalCount,
+          page,
+          limit,
+          hasMore,
+        };
+
+        this.productsQueryCache.set(cacheKey, { data: result, timestamp: Date.now() });
+        return result;
+      }
+    } catch (restErr) {
+      console.warn('Directus REST getProductsPaginated error, trying SDK:', restErr);
     }
-    return result;
+
+    // 2. Secondary Method: Directus SDK fallback
+    try {
+      const sdkQuery: any = {
+        page,
+        limit,
+        meta: '*',
+        fields: ['*', 'datasheet.*', 'user_manual.*', 'image_gallery.*', 'image_gallery.directus_files_id.*'],
+        sort: sortArray,
+      };
+
+      if (search) sdkQuery.search = search;
+      if (filterConditions.length === 1) sdkQuery.filter = filterConditions[0];
+      else if (filterConditions.length > 1) sdkQuery.filter = { _and: filterConditions };
+
+      const response: any = await Promise.race([
+        directus.request(readItems('products' as any, sdkQuery)),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000)),
+      ]);
+
+      const rawItems = Array.isArray(response)
+        ? response
+        : (Array.isArray(response?.data) ? response.data : []);
+      const totalCount = Number(
+        response?.meta?.filter_count ??
+        response?.meta?.total_count ??
+        (rawItems.length >= limit ? page * limit + 1 : (page - 1) * limit + rawItems.length)
+      );
+
+      const products = rawItems.map((item: any) => this.mapDirectusProduct(item));
+      const hasMore = page * limit < totalCount;
+
+      const result: PaginatedProductsResponse = {
+        products,
+        totalCount,
+        page,
+        limit,
+        hasMore,
+      };
+
+      this.productsQueryCache.set(cacheKey, { data: result, timestamp: Date.now() });
+      return result;
+    } catch (sdkErr) {
+      console.warn('Directus getProductsPaginated SDK error:', sdkErr);
+    }
+
+    // Never return mock product data if offline or request fails.
+    // Only genuine products fetched from Directus are ever displayed.
+    return {
+      products: [],
+      totalCount: 0,
+      page,
+      limit,
+      hasMore: false,
+    };
+  }
+
+  async getProducts(categoryId?: string, search?: string): Promise<Product[]> {
+    const res = await this.getProductsPaginated({
+      page: 1,
+      limit: 100,
+      categoryId,
+      search,
+    });
+    return res.products;
   }
 
   async getProductById(id: string): Promise<Product | null> {
@@ -420,10 +769,29 @@ class ApiService {
         return this.mapDirectusProduct(item);
       }
     } catch {
-      // Offline fallback
+      // Directus SDK failed or timeout, try REST endpoint fallback
+      try {
+        const resp = await fetch(
+          `${APP_CONFIG.apiBaseUrl}/items/products/${id}?fields=*,datasheet.*,user_manual.*,image_gallery.*,image_gallery.directus_files_id.*`,
+          {
+            headers: {
+              Authorization: `Bearer ${APP_CONFIG.accessToken}`,
+              Accept: 'application/json',
+            },
+          }
+        );
+        if (resp.ok) {
+          const json = await resp.json();
+          if (json.data) {
+            return this.mapDirectusProduct(json.data);
+          }
+        }
+      } catch {
+        // Network offline
+      }
     }
-    const products = await this.getProducts();
-    return products.find(p => p.id === id || p.slug === id) || null;
+    // Never return mock product if offline or missing
+    return null;
   }
 
   async getProjects(): Promise<Project[]> {
@@ -863,6 +1231,21 @@ class ApiService {
         quantity: Math.max(1, Math.round(it.quantity)),
       }));
 
+    const extraChargesList = params.extraCharges || (
+      params.deliveryCharge && params.deliveryCharge > 0
+        ? [
+            {
+              name: 'Delivery Charge',
+              title: 'Delivery Charge',
+              label: 'Delivery Charge',
+              amount: params.deliveryCharge,
+              value: params.deliveryCharge,
+              price: params.deliveryCharge,
+            },
+          ]
+        : []
+    );
+
     // Method 1: Web backend endpoint /api/create-order (same as web app)
     if (validUuidItems.length > 0) {
       try {
@@ -878,6 +1261,8 @@ class ApiService {
             phone: normalizedPhone,
             address: enrichedAddress,
             total: finalTotal,
+            delivery_charge: params.deliveryCharge ?? 0,
+            extra_charges: extraChargesList,
             items: validUuidItems,
           }),
         });
@@ -919,6 +1304,8 @@ class ApiService {
           phone: normalizedPhone,
           address: enrichedAddress,
           total: finalTotal,
+          delivery_charge: params.deliveryCharge ?? 0,
+          extra_charges: extraChargesList,
           status: 'pending',
           placed_at: bdIso,
         } as any)

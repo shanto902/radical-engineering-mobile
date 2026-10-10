@@ -11,7 +11,12 @@ export interface CartToastData {
 interface CartContextType {
   cart: CartItem[];
   wishlist: string[];
-  addToCart: (product: Product, quantity?: number, customPackage?: SystemBuilderResults) => void;
+  addToCart: (
+    product: Product,
+    quantity?: number,
+    customPackage?: SystemBuilderResults,
+    showNotification?: boolean
+  ) => void;
   removeFromCart: (itemId: string) => void;
   updateQuantity: (itemId: string, delta: number) => void;
   clearCart: () => void;
@@ -22,6 +27,7 @@ interface CartContextType {
   toast: CartToastData | null;
   hideToast: () => void;
   showToast: (product: Product, quantity?: number) => void;
+  updateCartItems: (newCart: CartItem[]) => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -33,7 +39,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     storageService.getCart().then(items => {
-      if (items) setCart(items);
+      if (items) {
+        const validItems = items.filter(item => {
+          const p = item.customPackage?.estimatedCostBDT ?? item.product?.price;
+          return p && p > 0;
+        });
+        setCart(validItems);
+      }
     });
     storageService.getWishlist().then(ids => {
       if (ids) setWishlist(ids);
@@ -58,7 +70,18 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToast(null);
   };
 
-  const addToCart = (product: Product, quantity = 1, customPackage?: SystemBuilderResults) => {
+  const addToCart = (
+    product: Product,
+    quantity = 1,
+    customPackage?: SystemBuilderResults,
+    showNotification = true
+  ) => {
+    // Call for price products (price 0) cannot be added to cart
+    const itemPrice = customPackage?.estimatedCostBDT ?? product.price;
+    if (!itemPrice || itemPrice <= 0) {
+      return;
+    }
+
     const existingIndex = cart.findIndex(
       item => item.product.id === product.id && !item.customPackage && !customPackage
     );
@@ -77,8 +100,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       saveCartItems([...cart, newItem]);
     }
 
-    // Trigger toast notification
-    showToast(product, quantity);
+    // Trigger toast notification only if requested
+    if (showNotification) {
+      showToast(product, quantity);
+    }
   };
 
   const removeFromCart = (itemId: string) => {
@@ -140,6 +165,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         toast,
         hideToast,
         showToast,
+        updateCartItems: saveCartItems,
       }}
     >
       {children}

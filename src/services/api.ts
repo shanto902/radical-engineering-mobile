@@ -1328,7 +1328,11 @@ class ApiService {
     // Construct enriched address with notes and custom package specs
     let enrichedAddress = params.address.trim();
     if (params.notes && params.notes.trim()) {
-      enrichedAddress += `\n[Special Notes: ${params.notes.trim()}]`;
+      if (params.notes.trim().startsWith('[Special Note')) {
+        enrichedAddress += `\n${params.notes.trim()}`;
+      } else {
+        enrichedAddress += `\n[Special Notes: ${params.notes.trim()}]`;
+      }
     }
 
     const customItems = params.items.filter(it => !uuidRegex.test(it.id));
@@ -1346,18 +1350,9 @@ class ApiService {
         quantity: Math.max(1, Math.round(it.quantity)),
       }));
 
-    const extraChargesList = params.extraCharges || (
+    const extraChargesList: ExtraCharge[] = params.extraCharges || (
       params.deliveryCharge && params.deliveryCharge > 0
-        ? [
-            {
-              name: 'Delivery Charge',
-              title: 'Delivery Charge',
-              label: 'Delivery Charge',
-              amount: params.deliveryCharge,
-              value: params.deliveryCharge,
-              price: params.deliveryCharge,
-            },
-          ]
+        ? [{ name: 'Base Delivery Charge', cost: String(params.deliveryCharge) }]
         : []
     );
 

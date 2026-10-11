@@ -76,7 +76,6 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
           if (saved.phone) setPhone(saved.phone);
           if (saved.name) setName(saved.name);
           if (saved.address) setAddress(saved.address);
-          if (saved.notes) setNotes(saved.notes);
         }
       } catch {
         // ignore
@@ -507,47 +506,43 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
 
     setIsSubmitting(true);
     try {
-      const extraChargesList: ExtraCharge[] =
-        effectiveDeliveryCharge > 0
-          ? [
-              {
-                name: weightCharge > 0 ? 'Base Delivery Charge' : 'Delivery Charge',
-                title: weightCharge > 0 ? 'Base Delivery Charge' : 'Delivery Charge',
-                label: weightCharge > 0 ? 'Base Delivery Charge' : 'Delivery Charge',
-                amount: weightCharge > 0 ? baseDeliveryCharge : effectiveDeliveryCharge,
-                value: weightCharge > 0 ? baseDeliveryCharge : effectiveDeliveryCharge,
-                price: weightCharge > 0 ? baseDeliveryCharge : effectiveDeliveryCharge,
-              },
-              ...(weightCharge > 0
-                ? [
-                    {
-                      name: `Weight Charge (${totalCartWeightKg % 1 === 0 ? totalCartWeightKg : totalCartWeightKg.toFixed(1)} kg @ ৳${perKgCharge}/kg)`,
-                      title: `Weight Charge (${totalCartWeightKg % 1 === 0 ? totalCartWeightKg : totalCartWeightKg.toFixed(1)} kg)`,
-                      label: 'Weight Charge',
-                      amount: weightCharge,
-                      value: weightCharge,
-                      price: weightCharge,
-                    },
-                  ]
-                : []),
-            ]
-          : [];
+      const weightLabel =
+        totalCartWeightKg % 1 === 0 ? totalCartWeightKg : totalCartWeightKg.toFixed(1);
 
-      const orderAddress =
+      const extraChargesList: ExtraCharge[] = [];
+      if (fulfillmentMethod === 'delivery' && effectiveDeliveryCharge > 0) {
+        if (weightCharge > 0) {
+          extraChargesList.push({
+            name: 'Base Delivery Charge',
+            cost: String(baseDeliveryCharge),
+          });
+          extraChargesList.push({
+            name: `Weight Charge (${weightLabel} kg @ ৳${perKgCharge}/kg)`,
+            cost: String(weightCharge),
+          });
+        } else {
+          extraChargesList.push({
+            name: 'Base Delivery Charge',
+            cost: String(effectiveDeliveryCharge),
+          });
+        }
+      }
+
+      const rawBaseAddress =
         fulfillmentMethod === 'pickup'
-          ? (address.trim()
-              ? `[Store Pickup] ${address.trim()}`
-              : `[Store Pickup] Radical Engineering Showroom: ${APP_CONFIG.address}`)
+          ? (address.trim() || `Radical Engineering Showroom: ${APP_CONFIG.address}`)
           : address.trim();
 
-      const orderNotes = [
+      const cleanBaseAddress = rawBaseAddress.replace(/^\[Store Pickup\]\s*/i, '').trim();
+
+      const fulfillmentSuffix =
         fulfillmentMethod === 'pickup'
-          ? '[Fulfillment: Store Pickup]'
-          : `[Fulfillment: Home Delivery${totalCartWeightKg > 0 ? ` | Package Weight: ${totalCartWeightKg % 1 === 0 ? totalCartWeightKg : totalCartWeightKg.toFixed(1)} kg` : ''}]`,
-        notes.trim() || '',
-      ]
-        .filter(Boolean)
-        .join(' - ');
+          ? '\n[Special Notes: [Fullfillment: Store Pickup]]'
+          : '\n[Special Note: [Fullfilment: Home Delivery]]';
+
+      const orderAddress = `${cleanBaseAddress}${fulfillmentSuffix}`;
+
+      const orderNotes = notes.trim() || undefined;
 
       const result = await apiService.createOrder({
         name: name.trim(),
@@ -1055,35 +1050,6 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
                   numberOfLines={3}
                   value={address}
                   onChangeText={setAddress}
-                  style={[styles.input, styles.textArea, { color: colors.text }]}
-                  textAlignVertical="top"
-                />
-              </View>
-            </View>
-
-            {/* Field 4: Special Notes */}
-            <View style={styles.formGroup}>
-              <Text style={[styles.formLabel, { color: colors.text }]}>Special Notes (Optional)</Text>
-              <View
-                style={[
-                  styles.inputWrap,
-                  styles.textAreaWrap,
-                  { backgroundColor: colors.surfaceVariant, borderColor: colors.border },
-                ]}
-              >
-                <Ionicons
-                  name="document-text-outline"
-                  size={18}
-                  color={colors.textSecondary}
-                  style={{ marginRight: 8, marginTop: 4 }}
-                />
-                <TextInput
-                  placeholder="Site survey time, roof tin/concrete type, or wiring requirements"
-                  placeholderTextColor={colors.textMuted}
-                  multiline
-                  numberOfLines={2}
-                  value={notes}
-                  onChangeText={setNotes}
                   style={[styles.input, styles.textArea, { color: colors.text }]}
                   textAlignVertical="top"
                 />

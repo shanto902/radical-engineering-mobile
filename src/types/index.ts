@@ -298,11 +298,7 @@ export interface BrandPartner {
 
 export interface ExtraCharge {
   name: string;
-  amount: number;
-  title?: string;
-  label?: string;
-  value?: number;
-  price?: number;
+  cost: string;
 }
 
 export interface DirectusSettings {

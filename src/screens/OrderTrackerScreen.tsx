@@ -65,6 +65,32 @@ function formatOrderDate(dateStr: string): string {
   }
 }
 
+type FulfillmentType = "pickup" | "delivery" | null;
+
+/**
+ * Detects the fulfillment tag appended at checkout, e.g.
+ *   [Special Notes: [Fullfillment: Store Pickup]]
+ *   [Special Note: [Fullfilment: Home Delivery]]
+ * Tolerant of Note/Notes and Fullfillment/Fullfilment/Fulfillment spellings.
+ * Returns the fulfillment type and the address with the tag removed.
+ */
+const FULFILLMENT_TAG_REGEX =
+  /\[\s*Special\s+Notes?\s*:\s*\[\s*Ful+fil+ment\s*:\s*(Store\s+Pickup|Home\s+Delivery)\s*\]\s*\]/i;
+
+function parseFulfillment(rawAddress: string | undefined | null): {
+  type: FulfillmentType;
+  cleanAddress: string;
+} {
+  const address = rawAddress || "";
+  const match = address.match(FULFILLMENT_TAG_REGEX);
+  if (!match) {
+    return { type: null, cleanAddress: address.trim() };
+  }
+  const type: FulfillmentType = /pickup/i.test(match[1]) ? "pickup" : "delivery";
+  const cleanAddress = address.replace(FULFILLMENT_TAG_REGEX, "").trim();
+  return { type, cleanAddress };
+}
+
 export const OrderTrackerScreen: React.FC<OrderTrackerScreenProps> = ({
   navigation,
   route,
@@ -579,31 +605,86 @@ export const OrderTrackerScreen: React.FC<OrderTrackerScreenProps> = ({
                                 ৳ {item.total.toLocaleString()}
                               </Text>
                             </View>
-                            {Boolean(item.address) && (
-                              <View
-                                style={[
-                                  styles.infoRow,
-                                  { alignItems: "flex-start" },
-                                ]}
-                              >
-                                <Text
-                                  style={[
-                                    styles.infoLabel,
-                                    { color: colors.textSecondary },
-                                  ]}
-                                >
-                                  Address:
-                                </Text>
-                                <Text
-                                  style={[
-                                    styles.infoValue,
-                                    { color: colors.text, flex: 1 },
-                                  ]}
-                                >
-                                  {item.address}
-                                </Text>
-                              </View>
-                            )}
+                            {(() => {
+                              const { type: fulfillment, cleanAddress } =
+                                parseFulfillment(item.address);
+                              const isPickup = fulfillment === "pickup";
+                              const badgeColor = isPickup ? "#0284C7" : "#16A34A";
+                              return (
+                                <>
+                                  {fulfillment && (
+                                    <View style={styles.infoRow}>
+                                      <Text
+                                        style={[
+                                          styles.infoLabel,
+                                          { color: colors.textSecondary },
+                                        ]}
+                                      >
+                                        Fulfillment:
+                                      </Text>
+                                      <View
+                                        style={[
+                                          styles.fulfillmentBadge,
+                                          {
+                                            backgroundColor: isPickup
+                                              ? isDark
+                                                ? "rgba(2, 132, 199, 0.18)"
+                                                : "#E0F2FE"
+                                              : isDark
+                                                ? "rgba(22, 163, 74, 0.18)"
+                                                : "#DCFCE7",
+                                            borderColor: badgeColor,
+                                          },
+                                        ]}
+                                      >
+                                        <Ionicons
+                                          name={
+                                            isPickup
+                                              ? "storefront-outline"
+                                              : "car-outline"
+                                          }
+                                          size={13}
+                                          color={badgeColor}
+                                        />
+                                        <Text
+                                          style={[
+                                            styles.fulfillmentBadgeText,
+                                            { color: badgeColor },
+                                          ]}
+                                        >
+                                          {isPickup ? "Store Pickup" : "Home Delivery"}
+                                        </Text>
+                                      </View>
+                                    </View>
+                                  )}
+                                  {Boolean(cleanAddress) && (
+                                    <View
+                                      style={[
+                                        styles.infoRow,
+                                        { alignItems: "flex-start" },
+                                      ]}
+                                    >
+                                      <Text
+                                        style={[
+                                          styles.infoLabel,
+                                          { color: colors.textSecondary },
+                                        ]}
+                                      >
+                                        {isPickup ? "Pickup At:" : "Address:"}
+                                      </Text>
+                                      <Text
+                                        style={[
+                                          styles.infoValue,
+                                          { color: colors.text, flex: 1 },
+                                        ]}
+                                      >
+                                        {cleanAddress}
+                                      </Text>
+                                    </View>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </View>
 
                           {/* Order Stepper Timeline */}
@@ -951,6 +1032,19 @@ export const OrderTrackerScreen: React.FC<OrderTrackerScreenProps> = ({
 };
 
 const styles = StyleSheet.create({
+  fulfillmentBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+  },
+  fulfillmentBadgeText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+  },
   container: {
     flex: 1,
   },

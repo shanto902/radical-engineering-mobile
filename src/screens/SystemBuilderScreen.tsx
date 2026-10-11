@@ -31,6 +31,7 @@ import { COLORS, SPACING, RADIUS } from "../constants/theme";
 import { APP_CONFIG } from "../constants/config";
 import { storageService, SavedCustomDevice } from "../services/storage";
 import { apiService } from "../services/api";
+import { executePrintOrShareQuotation } from "../utils/quotationPdf";
 
 export interface ConfiguredSlotItem {
   productId: string;
@@ -333,6 +334,15 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
     ConfiguredSlotItem[] | null
   >(null);
 
+  // Track whether user has customized/updated any products away from standard suggestion
+  const isCustomPackage = useMemo(() => {
+    return (
+      configuredInverters !== null ||
+      configuredBatteries !== null ||
+      configuredPanels !== null
+    );
+  }, [configuredInverters, configuredBatteries, configuredPanels]);
+
   // Modal to select component from real catalog (targets specific index in slot array)
   const [selectorModalType, setSelectorModalType] = useState<
     "inverter" | "battery" | "solar" | null
@@ -406,6 +416,7 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
   const [pendingCartItems, setPendingCartItems] = useState<
     { product: Product; quantity: number }[]
   >([]);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
 
   // --- AsyncStorage Persistence ---
   // Load saved builder data on component mount
@@ -1462,6 +1473,35 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
     navigation.navigate("Cart");
   };
 
+  const handlePrintQuotationPdf = async () => {
+    if (results.totalWatts === 0) {
+      Alert.alert(
+        "No Appliances Selected",
+        "Please add at least one appliance with quantity greater than 0 before printing a quotation.",
+      );
+      return;
+    }
+
+    setIsGeneratingPdf(true);
+    try {
+      await executePrintOrShareQuotation({
+        appliances,
+        results,
+        backupHours,
+        packageTier,
+        isSolarHybrid,
+        isCustomPackage,
+        selectedItems:
+          pendingCartItems.length > 0 ? pendingCartItems : undefined,
+      });
+    } catch (err) {
+      console.error("Print quotation PDF error:", err);
+      Alert.alert("PDF Error", "Failed to generate quotation PDF document.");
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
   const handleConsultWhatsApp = () => {
     if (results.totalWatts === 0) {
       Alert.alert(
@@ -1471,8 +1511,9 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
       return;
     }
 
-    const tierLabel =
-      packageTier === "premium"
+    const tierLabel = isCustomPackage
+      ? "Custom Package"
+      : packageTier === "premium"
         ? "Premium Pro"
         : packageTier === "economy"
           ? "Economy"
@@ -2748,7 +2789,7 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
                       { color: "#FFFFFF", fontWeight: "800" },
                     ]}
                   >
-                    HEAVY DUTY PRO · COMMERCIAL GRADE
+                    COMMERCIAL GRADE
                   </Text>
                 </View>
                 <View
@@ -4883,7 +4924,9 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
                     { color: colors.textSecondary },
                   ]}
                 >
-                  {packageTier.toUpperCase()} SYSTEM ESTIMATE
+                  {isCustomPackage
+                    ? "CUSTOM PACKAGE ESTIMATE"
+                    : `${packageTier.toUpperCase()} SYSTEM ESTIMATE`}
                 </Text>
                 <View
                   style={[styles.tierTag, { backgroundColor: colors.primary }]}
@@ -4894,11 +4937,13 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
                       { color: isDark ? "#260B00" : "#FFFFFF" },
                     ]}
                   >
-                    {packageTier === "premium"
-                      ? "PRO"
-                      : packageTier === "economy"
-                        ? "BUDGET"
-                        : "STANDARD"}
+                    {isCustomPackage
+                      ? "CUSTOM"
+                      : packageTier === "premium"
+                        ? "PRO"
+                        : packageTier === "economy"
+                          ? "BUDGET"
+                          : "STANDARD"}
                   </Text>
                 </View>
               </View>
@@ -4910,11 +4955,13 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
                     { color: colors.textSecondary },
                   ]}
                 >
-                  {packageTier === "economy"
-                    ? "Economy Grade System"
-                    : packageTier === "premium"
-                      ? "Premium Pro Grade System"
-                      : "Standard Recommended System"}
+                  {isCustomPackage
+                    ? "Custom Engineered Package"
+                    : packageTier === "economy"
+                      ? "Economy Grade System"
+                      : packageTier === "premium"
+                        ? "Premium Pro Grade System"
+                        : "Standard Recommended System"}
                 </Text>
               ) : null}
 
@@ -4985,6 +5032,46 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
               <Text style={styles.whatsAppPackageText}>
                 Request WhatsApp Quotation
               </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.printPdfScreenBtn,
+                {
+                  borderColor: colors.border,
+                  backgroundColor: colors.surface,
+                },
+              ]}
+              onPress={handlePrintQuotationPdf}
+              activeOpacity={0.85}
+              disabled={results.totalWatts === 0 || isGeneratingPdf}
+            >
+              {isGeneratingPdf ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <>
+                  <Ionicons
+                    name="print-outline"
+                    size={18}
+                    color={
+                      results.totalWatts > 0 ? colors.primary : colors.textMuted
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.printPdfScreenText,
+                      {
+                        color:
+                          results.totalWatts > 0
+                            ? colors.text
+                            : colors.textMuted,
+                      },
+                    ]}
+                  >
+                    Print System Quotation
+                  </Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -6240,22 +6327,14 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
                   },
                 ]}
               >
-                <Ionicons
-                  name="cart"
-                  size={24}
-                  color={colors.primary}
-                />
+                <Ionicons name="cart" size={24} color={colors.primary} />
               </View>
               <TouchableOpacity
                 onPress={() => setIsCartConfirmModalVisible(false)}
                 style={styles.modalCloseBtn}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Ionicons
-                  name="close"
-                  size={22}
-                  color={colors.textSecondary}
-                />
+                <Ionicons name="close" size={22} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
@@ -6268,7 +6347,8 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
                 { color: colors.textSecondary },
               ]}
             >
-              Review your configured equipment and estimated total before adding to cart.
+              Review your configured equipment and estimated total before adding
+              to cart.
             </Text>
 
             {/* System Cost & Specifications Card */}
@@ -6312,11 +6392,13 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
                       { color: isDark ? "#260B00" : "#FFFFFF" },
                     ]}
                   >
-                    {packageTier === "premium"
-                      ? "PRO"
-                      : packageTier === "economy"
-                        ? "BUDGET"
-                        : "STANDARD"}
+                    {isCustomPackage
+                      ? "CUSTOM"
+                      : packageTier === "premium"
+                        ? "PRO"
+                        : packageTier === "economy"
+                          ? "BUDGET"
+                          : "STANDARD"}
                   </Text>
                 </View>
               </View>
@@ -6334,10 +6416,7 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
                     color={colors.primary}
                   />
                   <Text
-                    style={[
-                      styles.cartSuccessSpecText,
-                      { color: colors.text },
-                    ]}
+                    style={[styles.cartSuccessSpecText, { color: colors.text }]}
                   >
                     {results.totalWatts}W Load
                   </Text>
@@ -6354,10 +6433,7 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
                     color={COLORS.success}
                   />
                   <Text
-                    style={[
-                      styles.cartSuccessSpecText,
-                      { color: colors.text },
-                    ]}
+                    style={[styles.cartSuccessSpecText, { color: colors.text }]}
                   >
                     ~{results.actualBackupHours}h Backup
                   </Text>
@@ -6378,10 +6454,7 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
                     color={COLORS.warning}
                   />
                   <Text
-                    style={[
-                      styles.cartSuccessSpecText,
-                      { color: colors.text },
-                    ]}
+                    style={[styles.cartSuccessSpecText, { color: colors.text }]}
                   >
                     {isSolarHybrid ? "Solar Hybrid" : "Standard IPS"}
                   </Text>
@@ -6392,10 +6465,7 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
             {/* List of Configured Items */}
             <View style={styles.cartSuccessItemsHeader}>
               <Text
-                style={[
-                  styles.cartSuccessItemsTitle,
-                  { color: colors.text },
-                ]}
+                style={[styles.cartSuccessItemsTitle, { color: colors.text }]}
               >
                 Configured Equipment ({pendingCartItems.length}{" "}
                 {pendingCartItems.length === 1 ? "item" : "items"})
@@ -6531,6 +6601,41 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
                 >
                   Add to Cart
                 </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.cartPrintPdfBtn,
+                  {
+                    borderColor: colors.primary,
+                    backgroundColor: isDark
+                      ? "rgba(252, 185, 116, 0.12)"
+                      : "#FFF7ED",
+                  },
+                ]}
+                onPress={handlePrintQuotationPdf}
+                activeOpacity={0.8}
+                disabled={isGeneratingPdf}
+              >
+                {isGeneratingPdf ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <>
+                    <Ionicons
+                      name="print-outline"
+                      size={18}
+                      color={colors.primary}
+                    />
+                    <Text
+                      style={[
+                        styles.cartPrintPdfBtnText,
+                        { color: colors.primary },
+                      ]}
+                    >
+                      Print PDF Quotation
+                    </Text>
+                  </>
+                )}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -8366,6 +8471,33 @@ const styles = StyleSheet.create({
   },
   cartSuccessKeepBtnText: {
     fontSize: 13,
+    fontWeight: "700",
+  },
+  cartPrintPdfBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: RADIUS.md,
+    borderWidth: 1.5,
+  },
+  cartPrintPdfBtnText: {
+    fontSize: 13.5,
+    fontWeight: "800",
+  },
+  printPdfScreenBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 13,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    marginTop: 2,
+  },
+  printPdfScreenText: {
+    fontSize: 13.5,
     fontWeight: "700",
   },
 });

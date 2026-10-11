@@ -172,11 +172,87 @@ export interface SystemBuilderResults {
   batteryCount: number;
   recommendedSolarKw?: number;
   estimatedCostBDT: number;
+  estimatedCostMinBDT?: number;
+  estimatedCostMaxBDT?: number;
+  packageTier?: 'economy' | 'standard' | 'premium';
+  solarRange?: 'essential' | 'balanced' | 'max';
+  solarDetails?: {
+    panelCount: number;
+    panelWattage: number;
+    totalWatts: number;
+    panelBrand: string;
+    dailyUnitsKwh: number;
+    roofSpaceSqFt: number;
+    warranty: string;
+  };
   breakdown: {
     inverter: string;
     battery: string;
     solarPanels?: string;
   };
+  activeInverterProduct?: Product;
+  activeBatteryProduct?: Product;
+  activePanelProduct?: Product;
+  inverterProvidedVa?: number;
+  inverterProvidedWatts?: number;
+  batteryProvidedAh?: number;
+  actualBackupHours?: number;
+  headroomPercent?: number;
+  isSafeHeadroom?: boolean;
+  tierPrices?: {
+    economy: number;
+    standard: number;
+    premium: number;
+  };
+  solarOptionPrices?: {
+    essential: number;
+    balanced: number;
+    max: number;
+  };
+  solarOptionCounts?: {
+    essential: number;
+    balanced: number;
+    max: number;
+  };
+  seriesBatteryCount?: number;
+  minVoltageString?: number;
+  recommendedBatteryCount?: number;
+  effectiveInverterCount?: number;
+  effectiveBatteryCount?: number;
+  effectivePanelCount?: number;
+  effectiveParallelBanks?: number;
+  effectiveActualBackupHours?: number;
+  effectiveSolarKw?: number;
+  effectiveDailyUnits?: number;
+  effectiveRoofSpaceSqFt?: number;
+  isCustomizedQuantities?: boolean;
+  inverterItems?: BuilderSlotItem[];
+  batteryItems?: BuilderSlotItem[];
+  panelItems?: BuilderSlotItem[];
+  primaryInverterQty?: number;
+  secondaryInverterProduct?: Product;
+  secondaryInverterQty?: number;
+  hasInverterCombination?: boolean;
+  totalInverterVa?: number;
+  totalInverterWatts?: number;
+  primaryBatteryQty?: number;
+  secondaryBatteryProduct?: Product;
+  secondaryBatteryQty?: number;
+  hasBatteryCombination?: boolean;
+  primaryPanelQty?: number;
+  secondaryPanelProduct?: Product;
+  secondaryPanelQty?: number;
+  hasPanelCombination?: boolean;
+}
+
+export interface BuilderSlotItem {
+  product: Product;
+  quantity: number;
+  va?: number;
+  watts?: number;
+  ah?: number;
+  wh?: number;
+  totalWatts?: number;
 }
 
 export interface CartItem {

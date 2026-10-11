@@ -28,6 +28,10 @@ interface CartContextType {
   hideToast: () => void;
   showToast: (product: Product, quantity?: number) => void;
   updateCartItems: (newCart: CartItem[]) => void;
+  addMultipleToCart: (
+    items: { product: Product; quantity: number }[],
+    showNotification?: boolean
+  ) => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -106,6 +110,33 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const addMultipleToCart = (
+    items: { product: Product; quantity: number }[],
+    showNotification = true
+  ) => {
+    let updated = [...cart];
+    for (const { product, quantity } of items) {
+      if (!product || quantity <= 0) continue;
+      const idx = updated.findIndex(item => item.product.id === product.id && !item.customPackage);
+      if (idx > -1) {
+        updated[idx] = {
+          ...updated[idx],
+          quantity: updated[idx].quantity + quantity,
+        };
+      } else {
+        updated.push({
+          id: `${product.id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          product,
+          quantity,
+        });
+      }
+    }
+    saveCartItems(updated);
+    if (showNotification && items.length > 0) {
+      showToast(items[0].product, items.reduce((sum, it) => sum + it.quantity, 0));
+    }
+  };
+
   const removeFromCart = (itemId: string) => {
     const updated = cart.filter(item => item.id !== itemId);
     saveCartItems(updated);
@@ -155,6 +186,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         cart,
         wishlist,
         addToCart,
+        addMultipleToCart,
         removeFromCart,
         updateQuantity,
         clearCart,

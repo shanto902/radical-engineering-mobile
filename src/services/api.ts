@@ -234,6 +234,44 @@ class ApiService {
       }
       this.metadataLoaded = true;
     } catch {
+      // Try REST endpoints fallback before static offline map
+      try {
+        const [catsRes, brandsRes] = await Promise.all([
+          fetch(`${APP_CONFIG.apiBaseUrl}/items/categories?limit=100`, {
+            headers: {
+              Authorization: `Bearer ${APP_CONFIG.accessToken}`,
+              Accept: 'application/json',
+            },
+          }),
+          fetch(`${APP_CONFIG.apiBaseUrl}/items/brands?limit=100`, {
+            headers: {
+              Authorization: `Bearer ${APP_CONFIG.accessToken}`,
+              Accept: 'application/json',
+            },
+          }),
+        ]);
+
+        if (catsRes.ok && brandsRes.ok) {
+          const catsJson = await catsRes.json();
+          const brandsJson = await brandsRes.json();
+          if (Array.isArray(catsJson.data)) {
+            catsJson.data.forEach((c: any) => {
+              this.categoriesMap[c.id] = { id: c.id, name: c.name, slug: c.slug || String(c.id) };
+              if (c.slug) this.categoriesMap[c.slug] = { id: c.id, name: c.name, slug: c.slug };
+            });
+          }
+          if (Array.isArray(brandsJson.data)) {
+            brandsJson.data.forEach((b: any) => {
+              this.brandsMap[b.id] = b.name;
+            });
+          }
+          this.metadataLoaded = true;
+          return;
+        }
+      } catch {
+        // network offline
+      }
+
       // Offline fallback: Use default maps
       this.categoriesMap = {
         1: { id: 1, name: 'Solar Panels', slug: 'solar-panels' },
@@ -264,7 +302,12 @@ class ApiService {
   }
 
   private mapDirectusProduct(item: any): Product {
-    let brandName = this.brandsMap[item.brand] || (typeof item.brand === 'string' ? item.brand : '');
+    let brandName = '';
+    if (item.brand && typeof item.brand === 'object') {
+      brandName = item.brand.name || this.brandsMap[item.brand.id] || '';
+    } else if (item.brand !== undefined && item.brand !== null) {
+      brandName = this.brandsMap[item.brand] || (typeof item.brand === 'string' ? item.brand : '');
+    }
     if (brandName) {
       const lower = brandName.toLowerCase().trim();
       if (
@@ -596,26 +639,58 @@ class ApiService {
       }
     }
 
-    // 2. Server-side Brand Filter
+    // 2. Server-side Brand Filter (Directus 'brand' column is integer foreign key)
     if (brand && brand !== 'all') {
-      const lowerBrand = brand.toLowerCase().trim();
-      let matchedBrandId: any = null;
-      for (const [id, name] of Object.entries(this.brandsMap)) {
-        if (name.toLowerCase().trim() === lowerBrand) {
-          matchedBrandId = id;
-          break;
+      const cleanBrand = String(brand).trim();
+      const lowerBrand = cleanBrand.toLowerCase();
+      const matchedIds = new Set<number>();
+
+      // A. If brand parameter is already a numeric ID
+      const directNumeric = Number(cleanBrand);
+      if (!isNaN(directNumeric) && directNumeric > 0) {
+        matchedIds.add(directNumeric);
+      }
+
+      // B. Match brand against this.brandsMap (case-insensitive exact)
+      for (const [idStr, name] of Object.entries(this.brandsMap)) {
+        const bName = String(name || '').toLowerCase().trim();
+        if (bName === lowerBrand) {
+          const numId = Number(idStr);
+          if (!isNaN(numId)) matchedIds.add(numId);
         }
       }
-      if (matchedBrandId) {
+
+      // C. If no exact match found, match brand against this.brandsMap (substring/fuzzy)
+      if (matchedIds.size === 0) {
+        for (const [idStr, name] of Object.entries(this.brandsMap)) {
+          const bName = String(name || '').toLowerCase().trim();
+          if (bName && (bName.includes(lowerBrand) || lowerBrand.includes(bName))) {
+            const numId = Number(idStr);
+            if (!isNaN(numId)) matchedIds.add(numId);
+          }
+        }
+      }
+
+      const idsArray = Array.from(matchedIds);
+      if (idsArray.length === 1) {
+        // Directus 'brand' is integer, so query using integer equality and title text match fallback
         filterConditions.push({
           _or: [
-            { brand: { _eq: matchedBrandId } },
-            { brand: { _eq: Number(matchedBrandId) || matchedBrandId } },
-            { brand: { _icontains: brand } },
+            { brand: { _eq: idsArray[0] } },
+            { name: { _icontains: cleanBrand } },
+          ],
+        });
+      } else if (idsArray.length > 1) {
+        // Multiple IDs match (e.g. Trina Solar or multi-vendor entries)
+        filterConditions.push({
+          _or: [
+            { brand: { _in: idsArray } },
+            { name: { _icontains: cleanBrand } },
           ],
         });
       } else {
-        filterConditions.push({ brand: { _icontains: brand } });
+        // Safe fallback: never query integer 'brand' field with _icontains. Query product 'name' instead.
+        filterConditions.push({ name: { _icontains: cleanBrand } });
       }
     }
 
@@ -751,6 +826,46 @@ class ApiService {
       categoryId,
       search,
     });
+    return res.products;
+  }
+
+  /**
+   * Direct SDK fetch for a specific category using Directus SDK readItems
+   * Queries only the exact category items without fetching all products to minimize server pressure.
+   */
+  async getProductsByCategorySdk(categorySlug: string, limit = 100): Promise<Product[]> {
+    await this.loadMetadata();
+    const catObj = this.categoriesMap[categorySlug];
+    const catId = catObj ? catObj.id : (!isNaN(Number(categorySlug)) ? Number(categorySlug) : undefined);
+
+    if (catId !== undefined) {
+      try {
+        const sdkQuery: any = {
+          limit,
+          fields: ['*', 'datasheet.*', 'user_manual.*', 'image_gallery.*', 'image_gallery.directus_files_id.*'],
+          filter: { category: { _eq: catId } },
+          sort: ['-date_created', '-id'],
+        };
+
+        const response: any = await Promise.race([
+          directus.request(readItems('products' as any, sdkQuery)),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000)),
+        ]);
+
+        const rawItems = Array.isArray(response)
+          ? response
+          : (Array.isArray(response?.data) ? response.data : []);
+
+        if (rawItems.length > 0) {
+          return rawItems.map((item: any) => this.mapDirectusProduct(item));
+        }
+      } catch (sdkErr) {
+        console.warn(`Directus SDK getProductsByCategorySdk error for ${categorySlug}:`, sdkErr);
+      }
+    }
+
+    // Fallback to getProductsPaginated
+    const res = await this.getProductsPaginated({ categoryId: categorySlug, limit });
     return res.products;
   }
 

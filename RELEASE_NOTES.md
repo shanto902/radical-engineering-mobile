@@ -1,5 +1,38 @@
 # Release Notes — Radical Engineering Mobile
 
+## Version 3.1.1 (Version Code: 10)
+**Target Platform:** Android (Google Play Store)  
+**Package Name:** `com.radicalengineering.bd`  
+**Release Date:** October 2026
+
+### 📱 Google Play Console "What's New" (Under 500 Characters)
+
+#### English (`en-US` / `en-GB`)
+```text
+What's new in v3.1.1:
+
+• Critical bug fixes and performance improvements.
+• Out-of-stock products can no longer be ordered or purchased.
+• System Builder automatically selects active in-stock models.
+• Print branded PDF system quotations directly from the builder.
+• Transparent breakdown of delivery and weight charges at checkout.
+• Order Tracker now shows Store Pickup or Home Delivery status.
+```
+
+#### Bengali (`bn-BD`)
+```text
+v৩.১.১ ভার্সনে নতুন কী আছে:
+
+• জরুরি বাগ ফিক্স ও গতিশীল পারফরম্যান্স উন্নয়ন।
+• স্টক শেষ হওয়া প্রোডাক্টের অর্ডার সম্পূর্ণ বন্ধ করা হয়েছে।
+• সিস্টেম বিল্ডার এখন স্বয়ংক্রিয়ভাবে ইন-স্টক মডেল নির্বাচন করে।
+• বিল্ডার থেকে সরাসরি ব্র্যান্ডেড কোটেশন PDF প্রিন্ট করার সুবিধা।
+• চেকআউটে ডেলিভারি ও অতিরিক্ত ওজন চার্জের স্পষ্ট বিবরণ।
+• অর্ডার ট্র্যাকারে শোরুম পিকআপ ও হোম ডেলিভারি স্ট্যাটাস প্রদর্শন।
+```
+
+---
+
 ## Version 3.1.0 (Version Code: 9)
 **Target Platform:** Android (Google Play Store)  
 **Package Name:** `com.radicalengineering.bd`  

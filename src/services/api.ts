@@ -27,6 +27,7 @@ export interface CreateOrderItem {
   productTitle?: string;
   quantity: number;
   price?: number;
+  inStock?: boolean;
 }
 
 export interface CreateOrderParams {
@@ -365,9 +366,18 @@ class ApiService {
         : (w.includes('(') ? w.replace(/\s*\(/, ' Warranty (') : `${w} Warranty`);
       specsMap['Warranty'] = formattedWarranty;
     }
-    specsMap['Stock Status'] = item.status === 'in-stock'
-      ? 'Available in Stock'
-      : (item.status === 'out-of-stock' ? 'Out of Stock' : (item.status || 'In Stock'));
+    const rawStatus = (item.status || item.stock_status || '').toLowerCase().trim();
+    const isOutOfStock =
+      rawStatus === 'out-of-stock' ||
+      rawStatus === 'outofstock' ||
+      rawStatus === 'out_of_stock' ||
+      item.in_stock === false ||
+      item.is_in_stock === false ||
+      (typeof item.stock === 'number' && item.stock <= 0 && rawStatus !== 'in-stock');
+
+    specsMap['Stock Status'] = isOutOfStock
+      ? 'Out of Stock'
+      : (rawStatus === 'in-stock' || rawStatus === 'instock' ? 'Available in Stock' : (item.status || 'In Stock'));
 
     const datasheetDoc = parseDocument(item.datasheet, 'Technical Datasheet', 'datasheet', this.assetsUrl);
     const manualDoc = parseDocument(item.user_manual, 'User Manual', 'manual', this.assetsUrl);
@@ -420,7 +430,7 @@ class ApiService {
       discountPercent: (originalPrice && originalPrice > finalPrice)
         ? Math.round(((originalPrice - finalPrice) / originalPrice) * 100)
         : undefined,
-      inStock: item.status !== 'out-of-stock',
+      inStock: !isOutOfStock,
       rating: 5.0,
       reviewsCount: 0,
       image: mainImgUrl,
@@ -1320,6 +1330,13 @@ class ApiService {
 
     if (!Array.isArray(params.items) || params.items.length === 0) {
       return { success: false, error: 'Your cart is empty. Please add items before placing order.' };
+    }
+
+    if (params.items.some(item => item.inStock === false)) {
+      return {
+        success: false,
+        error: 'One or more items in your cart are currently out of stock. Please remove them to proceed.',
+      };
     }
 
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

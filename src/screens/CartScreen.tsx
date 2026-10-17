@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Linking,
   Platform,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,9 +29,33 @@ export const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
   const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 16 : 10);
 
   const grandTotal = totalAmount;
+  const hasOutOfStockItems = cart.some(item => !item.product.inStock);
+
+  const handleProceedToCheckout = () => {
+    if (hasOutOfStockItems) {
+      const outOfStockTitles = cart
+        .filter(item => !item.product.inStock)
+        .map(item => item.product.title)
+        .join('\n• ');
+      Alert.alert(
+        'Out of Stock Items in Cart',
+        `The following items are out of stock and cannot be ordered:\n\n• ${outOfStockTitles}\n\nPlease remove them from your cart to proceed with checkout.`
+      );
+      return;
+    }
+    navigation.navigate('Checkout');
+  };
 
   const handleWhatsAppCheckout = () => {
     if (cart.length === 0) return;
+
+    if (hasOutOfStockItems) {
+      Alert.alert(
+        'Out of Stock Items in Cart',
+        'Please remove out-of-stock items from your cart before requesting a quotation.'
+      );
+      return;
+    }
 
     let itemsText = cart
       .map(
@@ -73,6 +98,23 @@ export const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
         </View>
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          {hasOutOfStockItems && (
+            <View
+              style={[
+                styles.outOfStockCartBanner,
+                {
+                  backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEE2E2',
+                  borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#FECACA',
+                },
+              ]}
+            >
+              <Ionicons name="alert-circle" size={18} color={COLORS.danger} />
+              <Text style={[styles.outOfStockCartBannerText, { color: COLORS.danger }]}>
+                Items in your cart are currently out of stock. Please remove them before proceeding to checkout.
+              </Text>
+            </View>
+          )}
+
           {/* Cart Items List */}
           {cart.map((item) => {
             const price = item.customPackage
@@ -98,6 +140,20 @@ export const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
                   <Text style={[styles.itemTitle, { color: colors.text }]} numberOfLines={2}>
                     {item.product.title}
                   </Text>
+
+                  {!item.product.inStock && (
+                    <View
+                      style={[
+                        styles.outOfStockItemBadge,
+                        { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.2)' : '#FEE2E2' },
+                      ]}
+                    >
+                      <Ionicons name="alert-circle" size={12} color={COLORS.danger} />
+                      <Text style={[styles.outOfStockItemBadgeText, { color: COLORS.danger }]}>
+                        Out of Stock • Remove to checkout
+                      </Text>
+                    </View>
+                  )}
 
                   {item.customPackage && (
                     <View style={[styles.customBadge, { backgroundColor: isDark ? 'rgba(252, 185, 116, 0.15)' : '#F5EBE6' }]}>
@@ -153,12 +209,38 @@ export const CartScreen: React.FC<CartScreenProps> = ({ navigation }) => {
           {/* Order Actions */}
           <View style={styles.actionsCol}>
             <TouchableOpacity
-              style={[styles.primaryCheckoutBtn, { backgroundColor: colors.primary }]}
-              onPress={() => navigation.navigate('Checkout')}
+              style={[
+                styles.primaryCheckoutBtn,
+                {
+                  backgroundColor: hasOutOfStockItems
+                    ? (isDark ? '#475569' : '#CBD5E1')
+                    : colors.primary,
+                },
+              ]}
+              onPress={handleProceedToCheckout}
               activeOpacity={0.85}
             >
-              <Text style={[styles.primaryCheckoutText, { color: isDark ? '#260B00' : '#FFFFFF' }]}>Proceed to Checkout</Text>
-              <Ionicons name="arrow-forward" size={18} color={isDark ? '#260B00' : '#FFFFFF'} />
+              <Text
+                style={[
+                  styles.primaryCheckoutText,
+                  {
+                    color: hasOutOfStockItems
+                      ? (isDark ? '#94A3B8' : '#64748B')
+                      : isDark ? '#260B00' : '#FFFFFF',
+                  },
+                ]}
+              >
+                {hasOutOfStockItems ? 'Remove Out of Stock Items' : 'Proceed to Checkout'}
+              </Text>
+              <Ionicons
+                name={hasOutOfStockItems ? 'alert-circle-outline' : 'arrow-forward'}
+                size={18}
+                color={
+                  hasOutOfStockItems
+                    ? (isDark ? '#94A3B8' : '#64748B')
+                    : isDark ? '#260B00' : '#FFFFFF'
+                }
+              />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -359,6 +441,35 @@ const styles = StyleSheet.create({
   whatsAppOrderText: {
     color: '#FFFFFF',
     fontSize: 14,
+    fontWeight: '700',
+  },
+  outOfStockCartBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    marginBottom: SPACING.md,
+  },
+  outOfStockCartBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  outOfStockItemBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  outOfStockItemBadgeText: {
+    fontSize: 10,
     fontWeight: '700',
   },
 });

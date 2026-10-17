@@ -103,13 +103,26 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, hori
             </View>
 
             {!isCallForPrice ? (
-              <TouchableOpacity
-                onPress={() => addToCart(product)}
-                style={[styles.addCartBtnSmall, { backgroundColor: colors.primary }]}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="cart-outline" size={16} color={isDark ? '#260B00' : '#FFFFFF'} />
-              </TouchableOpacity>
+              product.inStock ? (
+                <TouchableOpacity
+                  onPress={() => addToCart(product)}
+                  style={[styles.addCartBtnSmall, { backgroundColor: colors.primary }]}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="cart-outline" size={16} color={isDark ? '#260B00' : '#FFFFFF'} />
+                </TouchableOpacity>
+              ) : (
+                <View
+                  style={[
+                    styles.outOfStockBadgeSmall,
+                    { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.2)' : '#FEE2E2' },
+                  ]}
+                >
+                  <Text style={[styles.outOfStockBadgeSmallText, { color: COLORS.danger }]}>
+                    Out of Stock
+                  </Text>
+                </View>
+              )
             ) : (
               <TouchableOpacity
                 onPress={(e) => {
@@ -209,9 +222,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, hori
               </Text>
             )}
             <View style={styles.stockIndicator}>
-              <View style={[styles.stockDot, { backgroundColor: product.inStock ? COLORS.success : COLORS.warning }]} />
-              <Text style={[styles.stockStatusText, { color: colors.textSecondary }]}>
-                {product.inStock ? 'In Stock' : 'Order'}
+              <View
+                style={[
+                  styles.stockDot,
+                  { backgroundColor: product.inStock ? COLORS.success : COLORS.danger },
+                ]}
+              />
+              <Text
+                style={[
+                  styles.stockStatusText,
+                  { color: product.inStock ? colors.textSecondary : COLORS.danger },
+                ]}
+              >
+                {product.inStock ? 'In Stock' : 'Out of Stock'}
               </Text>
             </View>
           </View>
@@ -268,13 +291,26 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPress, hori
           </View>
 
           {!isCallForPrice ? (
-            <TouchableOpacity
-              onPress={() => addToCart(product)}
-              style={[styles.addCartBtn, { backgroundColor: colors.primary }]}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="cart" size={16} color={isDark ? '#260B00' : '#FFFFFF'} />
-            </TouchableOpacity>
+            product.inStock ? (
+              <TouchableOpacity
+                onPress={() => addToCart(product)}
+                style={[styles.addCartBtn, { backgroundColor: colors.primary }]}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="cart" size={16} color={isDark ? '#260B00' : '#FFFFFF'} />
+              </TouchableOpacity>
+            ) : (
+              <View
+                style={[
+                  styles.outOfStockBadgeGrid,
+                  { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.2)' : '#FEE2E2' },
+                ]}
+              >
+                <Text style={[styles.outOfStockBadgeGridText, { color: COLORS.danger }]}>
+                  Out of Stock
+                </Text>
+              </View>
+            )
           ) : (
             <TouchableOpacity
               onPress={(e) => {
@@ -566,5 +602,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: -0.2,
+  },
+  outOfStockBadgeSmall: {
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+    borderRadius: RADIUS.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  outOfStockBadgeSmallText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  outOfStockBadgeGrid: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: RADIUS.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  outOfStockBadgeGridText: {
+    fontSize: 11,
+    fontWeight: '800',
   },
 });

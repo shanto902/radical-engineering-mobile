@@ -1,0 +1,31 @@
+diff --git a/android/src/main/java/expo/modules/clipboard/ClipboardImage.kt b/android/src/main/java/expo/modules/clipboard/ClipboardImage.kt
+--- a/android/src/main/java/expo/modules/clipboard/ClipboardImage.kt
++++ b/android/src/main/java/expo/modules/clipboard/ClipboardImage.kt
+@@ -204,7 +204,25 @@
+ 
+ internal fun bitmapFromBase64String(base64Image: String): Bitmap = try {
+   val byteArray = Base64.decode(base64Image, Base64.DEFAULT)
+-  BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size)
++  val boundsOptions = BitmapFactory.Options().apply {
++    inJustDecodeBounds = true
++  }
++  BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size, boundsOptions)
++
++  var sampleSize = 1
++  val maxDim = 1024
++  if (boundsOptions.outHeight > maxDim || boundsOptions.outWidth > maxDim) {
++    val halfHeight = boundsOptions.outHeight / 2
++    val halfWidth = boundsOptions.outWidth / 2
++    while ((halfHeight / sampleSize) >= maxDim && (halfWidth / sampleSize) >= maxDim) {
++      sampleSize *= 2
++    }
++  }
++
++  val decodeOptions = BitmapFactory.Options().apply {
++    inSampleSize = sampleSize
++  }
++  BitmapFactory.decodeByteArray(byteArray, 0, byteArray.size, decodeOptions)
+     ?: throw RuntimeException("Failed to convert base64 into Bitmap")
+ } catch (e: RuntimeException) {
+   // Base64.decode throws IllegalArgumentException on invalid data, but
+

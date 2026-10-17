@@ -58,6 +58,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
   const { cart, totalAmount, clearCart, updateCartItems } = useCart();
   const insets = useSafeAreaInsets();
   const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 16 : 10);
+  const hasOutOfStockItems = cart.some(item => !item.product.inStock);
 
   // Form Fields (Phone FIRST as requested)
   const [phone, setPhone] = useState('');
@@ -504,6 +505,18 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
       return;
     }
 
+    if (hasOutOfStockItems) {
+      const outOfStockTitles = cart
+        .filter(item => !item.product.inStock)
+        .map(item => item.product.title)
+        .join('\n• ');
+      Alert.alert(
+        'Out of Stock Items in Order',
+        `The following items are currently out of stock and cannot be purchased:\n\n• ${outOfStockTitles}\n\nPlease remove them from your cart to proceed with placing the order.`
+      );
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const weightLabel =
@@ -557,6 +570,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
           productTitle: item.product.title,
           quantity: item.quantity,
           price: item.customPackage ? item.customPackage.estimatedCostBDT : item.product.price,
+          inStock: item.product.inStock,
         })),
       });
 
@@ -609,10 +623,17 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
     }
   };
 
-  // WhatsApp Checkout Option
   const handleWhatsAppCheckout = () => {
     Keyboard.dismiss();
     if (cart.length === 0) return;
+
+    if (hasOutOfStockItems) {
+      Alert.alert(
+        'Out of Stock Items in Order',
+        'Please remove out-of-stock items before requesting an order quotation.'
+      );
+      return;
+    }
 
     let itemsText = cart
       .map(
@@ -1066,6 +1087,23 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
               <Text style={[styles.cardTitle, { color: colors.text }]}>Order Items ({cart.length})</Text>
             </View>
 
+            {hasOutOfStockItems && (
+              <View
+                style={[
+                  styles.outOfStockCheckoutBanner,
+                  {
+                    backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEE2E2',
+                    borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#FECACA',
+                  },
+                ]}
+              >
+                <Ionicons name="alert-circle" size={16} color={COLORS.danger} />
+                <Text style={[styles.outOfStockCheckoutBannerText, { color: COLORS.danger }]}>
+                  This order contains out-of-stock items. Please return to your cart to remove them.
+                </Text>
+              </View>
+            )}
+
             {cart.map((item, idx) => {
               const itemPrice = item.customPackage
                 ? item.customPackage.estimatedCostBDT
@@ -1084,6 +1122,19 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
                     <Text style={[styles.itemTitle, { color: colors.text }]} numberOfLines={2}>
                       {item.product.title}
                     </Text>
+                    {!item.product.inStock && (
+                      <View
+                        style={[
+                          styles.outOfStockItemBadge,
+                          { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.2)' : '#FEE2E2' },
+                        ]}
+                      >
+                        <Ionicons name="alert-circle" size={11} color={COLORS.danger} />
+                        <Text style={[styles.outOfStockItemBadgeText, { color: COLORS.danger }]}>
+                          Out of Stock
+                        </Text>
+                      </View>
+                    )}
                     <View style={styles.itemMetaLine}>
                       <Text style={[styles.itemSub, { color: colors.textSecondary }]}>
                         {item.quantity} × {APP_CONFIG.currency} {itemPrice.toLocaleString()}
@@ -1198,7 +1249,9 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
               style={[
                 styles.submitOrderBtn,
                 {
-                  backgroundColor: isOffline
+                  backgroundColor: hasOutOfStockItems
+                    ? (isDark ? '#475569' : '#CBD5E1')
+                    : isOffline
                     ? (isDark ? '#334155' : '#94A3B8')
                     : colors.primary,
                   opacity: isSubmitting || isRevalidatingPricing || isOffline ? 0.75 : 1,
@@ -1227,6 +1280,13 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ navigation }) =>
                   <Ionicons name="cloud-offline-outline" size={18} color="#FFFFFF" />
                   <Text style={[styles.submitOrderText, { color: '#FFFFFF' }]}>
                     Offline • Connect to Confirm Order
+                  </Text>
+                </View>
+              ) : hasOutOfStockItems ? (
+                <View style={styles.btnLoadingRow}>
+                  <Ionicons name="alert-circle-outline" size={18} color={isDark ? '#94A3B8' : '#64748B'} />
+                  <Text style={[styles.submitOrderText, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                    Remove Out of Stock Items to Order
                   </Text>
                 </View>
               ) : (
@@ -1923,5 +1983,34 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 15,
     marginTop: 2,
+  },
+  outOfStockCheckoutBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 10,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    marginBottom: SPACING.sm,
+  },
+  outOfStockCheckoutBannerText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 16,
+  },
+  outOfStockItemBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+    marginTop: 2,
+  },
+  outOfStockItemBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
 });

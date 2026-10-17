@@ -2,7 +2,7 @@
   "expo": {
     "name": "Radical Engineering",
     "slug": "radical-engineering-mobile",
-    "version": "3.1.0",
+    "version": "3.1.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -36,7 +36,7 @@
         "backgroundColor": "#3c1100"
       },
       "package": "com.radicalengineering.bd",
-      "versionCode": 9,
+      "versionCode": 10,
       "permissions": [
         "INTERNET"
       ]

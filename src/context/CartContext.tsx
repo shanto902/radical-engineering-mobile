@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Alert } from 'react-native';
 import { Product, CartItem, SystemBuilderResults } from '../types';
 import { storageService } from '../services/storage';
 
@@ -86,6 +87,15 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
+    // Out of stock products cannot be added to cart
+    if (!product.inStock) {
+      Alert.alert(
+        'Out of Stock',
+        `"${product.title}" is currently out of stock and cannot be added to the cart.`
+      );
+      return;
+    }
+
     const existingIndex = cart.findIndex(
       item => item.product.id === product.id && !item.customPackage && !customPackage
     );
@@ -114,9 +124,21 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     items: { product: Product; quantity: number }[],
     showNotification = true
   ) => {
+    const validItems = items.filter(
+      it => it.product && it.product.inStock && it.quantity > 0 && it.product.price > 0
+    );
+
+    if (validItems.length < items.length) {
+      Alert.alert(
+        'Out of Stock Notice',
+        'Some components were excluded because they are currently out of stock.'
+      );
+    }
+
+    if (validItems.length === 0) return;
+
     let updated = [...cart];
-    for (const { product, quantity } of items) {
-      if (!product || quantity <= 0) continue;
+    for (const { product, quantity } of validItems) {
       const idx = updated.findIndex(item => item.product.id === product.id && !item.customPackage);
       if (idx > -1) {
         updated[idx] = {
@@ -132,8 +154,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
     saveCartItems(updated);
-    if (showNotification && items.length > 0) {
-      showToast(items[0].product, items.reduce((sum, it) => sum + it.quantity, 0));
+    if (showNotification && validItems.length > 0) {
+      showToast(validItems[0].product, validItems.reduce((sum, it) => sum + it.quantity, 0));
     }
   };
 

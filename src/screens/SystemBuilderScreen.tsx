@@ -766,15 +766,24 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
     // 2. Genuine Store Products from Directus (no mock data)
     // For solar system (isSolarHybrid), suggest from Inverter category ('inverter', 71 items).
     // For regular IPS (!isSolarHybrid), suggest from IPS / Solar IPS category ('ips-solar-ips', 3 items).
-    const availableInverters = isSolarHybrid
+    const rawInverters = isSolarHybrid
       ? catalogInverters.length > 0
         ? catalogInverters
         : catalogIps
       : catalogIps.length > 0
         ? catalogIps
         : catalogInverters;
-    const availableBatteries = catalogBatteries;
-    const availableSolarPanels = catalogSolarPanels;
+    const availableInverters = rawInverters.filter((p) => p.inStock).length > 0
+      ? rawInverters.filter((p) => p.inStock)
+      : rawInverters;
+
+    const availableBatteries = catalogBatteries.filter((p) => p.inStock).length > 0
+      ? catalogBatteries.filter((p) => p.inStock)
+      : catalogBatteries;
+
+    const availableSolarPanels = catalogSolarPanels.filter((p) => p.inStock).length > 0
+      ? catalogSolarPanels.filter((p) => p.inStock)
+      : catalogSolarPanels;
 
     const scoredInverters = availableInverters
       .map((p) => ({ product: p, va: extractInverterVa(p) }))
@@ -1461,12 +1470,30 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
       return;
     }
 
+    const outOfStockItems = itemsToAdd.filter((it) => !it.product.inStock);
+    if (outOfStockItems.length > 0) {
+      const titles = outOfStockItems.map((it) => it.product.title).join("\n• ");
+      Alert.alert(
+        "Out of Stock Component",
+        `The configured system contains out-of-stock items:\n\n• ${titles}\n\nPlease replace them with available in-stock models before adding to cart.`,
+      );
+      return;
+    }
+
     setPendingCartItems(itemsToAdd);
     setIsCartConfirmModalVisible(true);
   };
 
   const handleConfirmAddToCart = () => {
     if (pendingCartItems.length > 0) {
+      const outOfStockItems = pendingCartItems.filter((it) => !it.product.inStock);
+      if (outOfStockItems.length > 0) {
+        Alert.alert(
+          "Out of Stock Component",
+          "Cannot add system to cart because one or more components are out of stock. Please select in-stock replacements.",
+        );
+        return;
+      }
       addMultipleToCart(pendingCartItems);
     }
     setIsCartConfirmModalVisible(false);
@@ -6126,9 +6153,18 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
                           borderColor: isSelected
                             ? colors.primary
                             : colors.border,
+                          opacity: item.inStock ? 1 : 0.65,
                         },
                       ]}
                       onPress={() => {
+                        if (!item.inStock) {
+                          Alert.alert(
+                            "Out of Stock",
+                            `"${item.title}" is currently out of stock. Please select an available in-stock model.`,
+                          );
+                          return;
+                        }
+
                         if (selectorModalType === "inverter") {
                           const current =
                             configuredInverters ??
@@ -6237,6 +6273,32 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
                                 ]}
                               >
                                 ACTIVE
+                              </Text>
+                            </View>
+                          )}
+                          {!item.inStock && (
+                            <View
+                              style={[
+                                styles.selectorOutOfStockPill,
+                                {
+                                  backgroundColor: isDark
+                                    ? "rgba(239, 68, 68, 0.2)"
+                                    : "#FEE2E2",
+                                },
+                              ]}
+                            >
+                              <Ionicons
+                                name="ban"
+                                size={10}
+                                color={COLORS.danger}
+                              />
+                              <Text
+                                style={[
+                                  styles.selectorOutOfStockText,
+                                  { color: COLORS.danger },
+                                ]}
+                              >
+                                OUT OF STOCK
                               </Text>
                             </View>
                           )}
@@ -6550,6 +6612,27 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
                           {it.product.brand}
                         </Text>
                       )}
+                      {!it.product.inStock && (
+                        <View
+                          style={[
+                            styles.cartSuccessOutOfStockPill,
+                            {
+                              backgroundColor: isDark
+                                ? "rgba(239, 68, 68, 0.2)"
+                                : "#FEE2E2",
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.cartSuccessOutOfStockText,
+                              { color: COLORS.danger },
+                            ]}
+                          >
+                            Out of Stock
+                          </Text>
+                        </View>
+                      )}
                     </View>
                   </View>
 
@@ -6583,23 +6666,37 @@ export const SystemBuilderScreen: React.FC<SystemBuilderScreenProps> = ({
               <TouchableOpacity
                 style={[
                   styles.cartSuccessCheckoutBtn,
-                  { backgroundColor: colors.primary },
+                  {
+                    backgroundColor: pendingCartItems.some((it) => !it.product.inStock)
+                      ? (isDark ? "#475569" : "#CBD5E1")
+                      : colors.primary,
+                  },
                 ]}
                 onPress={handleConfirmAddToCart}
                 activeOpacity={0.8}
               >
                 <Ionicons
-                  name="cart"
+                  name={pendingCartItems.some((it) => !it.product.inStock) ? "alert-circle" : "cart"}
                   size={18}
-                  color={isDark ? "#260B00" : "#FFFFFF"}
+                  color={
+                    pendingCartItems.some((it) => !it.product.inStock)
+                      ? (isDark ? "#94A3B8" : "#64748B")
+                      : isDark ? "#260B00" : "#FFFFFF"
+                  }
                 />
                 <Text
                   style={[
                     styles.cartSuccessCheckoutBtnText,
-                    { color: isDark ? "#260B00" : "#FFFFFF" },
+                    {
+                      color: pendingCartItems.some((it) => !it.product.inStock)
+                        ? (isDark ? "#94A3B8" : "#64748B")
+                        : isDark ? "#260B00" : "#FFFFFF",
+                    },
                   ]}
                 >
-                  Add to Cart
+                  {pendingCartItems.some((it) => !it.product.inStock)
+                    ? "Contains Out of Stock"
+                    : "Add to Cart"}
                 </Text>
               </TouchableOpacity>
 
@@ -8236,6 +8333,18 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: "800",
   },
+  selectorOutOfStockPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  selectorOutOfStockText: {
+    fontSize: 8,
+    fontWeight: "800",
+  },
   selectorItemMetaRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -8435,6 +8544,15 @@ const styles = StyleSheet.create({
   cartSuccessItemBrand: {
     fontSize: 10,
     fontWeight: "600",
+  },
+  cartSuccessOutOfStockPill: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 3,
+  },
+  cartSuccessOutOfStockText: {
+    fontSize: 9,
+    fontWeight: "800",
   },
   cartSuccessItemPriceCol: {
     alignItems: "flex-end",

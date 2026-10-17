@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Share,
   Platform,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -192,7 +193,12 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
   };
 
   const handleAddToCartAndCart = () => {
-    if (isCallForPrice) return;
+    if (isCallForPrice || !product.inStock) {
+      if (!product.inStock) {
+        Alert.alert("Out of Stock", "This product is currently out of stock.");
+      }
+      return;
+    }
     hideToast();
     addToCart(product, quantity, undefined, false);
     navigation.navigate("Cart");
@@ -332,12 +338,12 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
             <View
               style={[
                 styles.stockPill,
-                { backgroundColor: product.inStock ? "#16A34A" : "#D97706" },
+                { backgroundColor: product.inStock ? "#16A34A" : COLORS.danger },
               ]}
             >
               <View style={styles.stockDotWhite} />
               <Text style={styles.stockPillText}>
-                {product.inStock ? "In Stock" : "Pre-Order"}
+                {product.inStock ? "In Stock" : "Out of Stock"}
               </Text>
             </View>
           </View>
@@ -523,8 +529,33 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
                       <Text style={styles.inStockTextMini}>In Stock</Text>
                     </View>
                   ) : (
-                    <View style={styles.preOrderBadgeMini}>
-                      <Text style={styles.preOrderTextMini}>Pre-Order</Text>
+                    <View
+                      style={[
+                        styles.preOrderBadgeMini,
+                        {
+                          backgroundColor: isDark
+                            ? "rgba(239, 68, 68, 0.2)"
+                            : "#FEE2E2",
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 4,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.inStockDot,
+                          { backgroundColor: COLORS.danger },
+                        ]}
+                      />
+                      <Text
+                        style={[
+                          styles.preOrderTextMini,
+                          { color: COLORS.danger },
+                        ]}
+                      >
+                        Out of Stock
+                      </Text>
                     </View>
                   )}
                 </View>
@@ -597,65 +628,97 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
 
               {/* Right Column: Quantity Stepper or Direct Call Button */}
               {!isCallForPrice ? (
-                <View style={styles.priceRightCol}>
-                  <Text
-                    style={[
-                      styles.qtyLabelMini,
-                      { color: colors.textSecondary },
-                    ]}
-                  >
-                    QUANTITY
-                  </Text>
-                  <View
-                    style={[
-                      styles.stepperBox,
-                      {
-                        borderColor: colors.border,
-                        backgroundColor: colors.surfaceVariant,
-                      },
-                    ]}
-                  >
-                    <TouchableOpacity
-                      onPress={() => setQuantity(Math.max(1, quantity - 1))}
-                      style={styles.stepperBtn}
-                      activeOpacity={0.7}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      accessibilityLabel="Decrease quantity"
-                    >
-                      <Ionicons name="remove" size={16} color={colors.text} />
-                    </TouchableOpacity>
-                    <Text style={[styles.stepperVal, { color: colors.text }]}>
-                      {quantity}
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() => setQuantity(quantity + 1)}
-                      style={styles.stepperBtn}
-                      activeOpacity={0.7}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      accessibilityLabel="Increase quantity"
-                    >
-                      <Ionicons name="add" size={16} color={colors.text} />
-                    </TouchableOpacity>
-                  </View>
-
-                  {quantity > 1 ? (
-                    <Text
-                      style={[styles.totalSubtext, { color: colors.primary }]}
-                    >
-                      Total: {APP_CONFIG.currency}{" "}
-                      {(product.price * quantity).toLocaleString()}
-                    </Text>
-                  ) : (
+                product.inStock ? (
+                  <View style={styles.priceRightCol}>
                     <Text
                       style={[
-                        styles.totalSubtextMuted,
-                        { color: colors.textMuted },
+                        styles.qtyLabelMini,
+                        { color: colors.textSecondary },
                       ]}
                     >
-                      Unit price
+                      QUANTITY
                     </Text>
-                  )}
-                </View>
+                    <View
+                      style={[
+                        styles.stepperBox,
+                        {
+                          borderColor: colors.border,
+                          backgroundColor: colors.surfaceVariant,
+                        },
+                      ]}
+                    >
+                      <TouchableOpacity
+                        onPress={() => setQuantity(Math.max(1, quantity - 1))}
+                        style={styles.stepperBtn}
+                        activeOpacity={0.7}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        accessibilityLabel="Decrease quantity"
+                      >
+                        <Ionicons name="remove" size={16} color={colors.text} />
+                      </TouchableOpacity>
+                      <Text style={[styles.stepperVal, { color: colors.text }]}>
+                        {quantity}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => setQuantity(quantity + 1)}
+                        style={styles.stepperBtn}
+                        activeOpacity={0.7}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        accessibilityLabel="Increase quantity"
+                      >
+                        <Ionicons name="add" size={16} color={colors.text} />
+                      </TouchableOpacity>
+                    </View>
+
+                    {quantity > 1 ? (
+                      <Text
+                        style={[styles.totalSubtext, { color: colors.primary }]}
+                      >
+                        Total: {APP_CONFIG.currency}{" "}
+                        {(product.price * quantity).toLocaleString()}
+                      </Text>
+                    ) : (
+                      <Text
+                        style={[
+                          styles.totalSubtextMuted,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        Unit price
+                      </Text>
+                    )}
+                  </View>
+                ) : (
+                  <View style={styles.priceRightCol}>
+                    <View
+                      style={[
+                        styles.outOfStockNoticeBox,
+                        {
+                          backgroundColor: isDark
+                            ? "rgba(239, 68, 68, 0.15)"
+                            : "#FEE2E2",
+                          borderColor: isDark
+                            ? "rgba(239, 68, 68, 0.3)"
+                            : "#FECACA",
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name="alert-circle"
+                        size={15}
+                        color={COLORS.danger}
+                      />
+                      <Text
+                        style={[
+                          styles.outOfStockNoticeText,
+                          { color: COLORS.danger },
+                        ]}
+                      >
+                        Sold Out
+                      </Text>
+                    </View>
+                  </View>
+                )
               ) : (
                 <View style={styles.priceRightColCall}>
                   <Text
@@ -1649,43 +1712,80 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
         ]}
       >
         {!isCallForPrice ? (
-          <>
-            <TouchableOpacity
-              style={styles.whatsAppActionBtn}
-              onPress={handleWhatsAppConsult}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="logo-whatsapp" size={18} color="#FFFFFF" />
-              <Text style={styles.whatsAppActionText}>WhatsApp</Text>
-            </TouchableOpacity>
+          product.inStock ? (
+            <>
+              <TouchableOpacity
+                style={styles.whatsAppActionBtn}
+                onPress={handleWhatsAppConsult}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="logo-whatsapp" size={18} color="#FFFFFF" />
+                <Text style={styles.whatsAppActionText}>WhatsApp</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[
-                styles.addToCartActionBtn,
-                { backgroundColor: isDark ? "#1E293B" : "#0F172A" },
-              ]}
-              onPress={() => addToCart(product, quantity)}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="cart" size={18} color="#FFFFFF" />
-              <Text style={styles.addToCartActionText}>Add to Cart</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.buyNowActionBtn, { backgroundColor: colors.primary }]}
-              onPress={handleAddToCartAndCart}
-              activeOpacity={0.85}
-            >
-              <Text
+              <TouchableOpacity
                 style={[
-                  styles.buyNowActionText,
-                  { color: isDark ? "#260B00" : "#FFFFFF" },
+                  styles.addToCartActionBtn,
+                  { backgroundColor: isDark ? "#1E293B" : "#0F172A" },
+                ]}
+                onPress={() => addToCart(product, quantity)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="cart" size={18} color="#FFFFFF" />
+                <Text style={styles.addToCartActionText}>Add to Cart</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.buyNowActionBtn, { backgroundColor: colors.primary }]}
+                onPress={handleAddToCartAndCart}
+                activeOpacity={0.85}
+              >
+                <Text
+                  style={[
+                    styles.buyNowActionText,
+                    { color: isDark ? "#260B00" : "#FFFFFF" },
+                  ]}
+                >
+                  Buy Now
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={styles.whatsAppCallForPriceBtn}
+                onPress={handleWhatsAppConsult}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="logo-whatsapp" size={18} color="#FFFFFF" />
+                <Text style={styles.actionBtnCallText}>WhatsApp Inquiry</Text>
+              </TouchableOpacity>
+
+              <View
+                style={[
+                  styles.outOfStockBarBtn,
+                  {
+                    backgroundColor: isDark ? "#334155" : "#E2E8F0",
+                    borderColor: isDark ? "#475569" : "#CBD5E1",
+                  },
                 ]}
               >
-                Buy Now
-              </Text>
-            </TouchableOpacity>
-          </>
+                <Ionicons
+                  name="ban-outline"
+                  size={18}
+                  color={isDark ? "#94A3B8" : "#64748B"}
+                />
+                <Text
+                  style={[
+                    styles.outOfStockBarText,
+                    { color: isDark ? "#94A3B8" : "#64748B" },
+                  ]}
+                >
+                  Out of Stock
+                </Text>
+              </View>
+            </>
+          )
         ) : (
           <>
             <TouchableOpacity
@@ -2502,6 +2602,34 @@ const styles = StyleSheet.create({
   },
   actionBtnCallText: {
     color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  outOfStockNoticeBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+  },
+  outOfStockNoticeText: {
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  outOfStockBarBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: RADIUS.md,
+    height: 46,
+    gap: 8,
+    borderWidth: 1,
+  },
+  outOfStockBarText: {
     fontSize: 14,
     fontWeight: "700",
   },
